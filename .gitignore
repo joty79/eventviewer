@@ -1,0 +1,4 @@
+# gitignore for eventviewer
+history.json
+exports/
+*.log
