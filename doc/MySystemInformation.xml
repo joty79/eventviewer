@@ -1,0 +1,662 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfSystemDetailsEntryItem xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SystemDetailsEntryItem>
+    <ComponentType>Λειτουργικό σύστημα</ComponentType>
+    <Display>Microsoft Windows 11 Pro (x64)</Display>
+    <Version>10.0.26200</Version>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>BIOS</ComponentType>
+    <Display>BIOS</Display>
+    <Version>1.32.0</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Host Bridge/DRAM Registers - 3EC2</Display>
+    <Version>10.1.14.8</Version>
+    <Device>3EC2</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) 300 Series Chipset Family SATA AHCI Controller</Display>
+    <Version>17.11.3.1010</Version>
+    <Device>A352</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) SPI (flash) Controller - A324</Display>
+    <Version>10.1.16.8</Version>
+    <Device>A324</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Management Engine Interface #1</Display>
+    <Version>2514.7.16.0</Version>
+    <Device>A360</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Serial IO I2C Host Controller - A368</Display>
+    <Version>30.100.1929.1</Version>
+    <Device>A368</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Thermal Subsystem - A379</Display>
+    <Version>10.1.16.8</Version>
+    <Device>A379</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>PCI standard RAM Controller</Display>
+    <Version>10.0.26100.1150</Version>
+    <Device>A36F</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>High Definition Audio Controller</Display>
+    <Version>10.0.26100.8521</Version>
+    <Device>A348</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) SMBus - A323</Display>
+    <Version>10.1.16.8</Version>
+    <Device>A323</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) 300 Series Chipset Family LPC Controller (Q370) - A306</Display>
+    <Version>10.1.16.8</Version>
+    <Device>A306</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Realtek(R) Audio</Display>
+    <Version>6.0.8710.1</Version>
+    <Device>0255</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Ethernet Connection (7) I219-LM</Display>
+    <Version>24.1.0.0</Version>
+    <Device>15BB</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>  Intel(R)</Display>
+    <Version>31.0.101.2114</Version>
+    <Device>280B</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) UHD Graphics 630</Display>
+    <Version>31.0.101.2114</Version>
+    <Device>3E92</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Xeon(R) E3 - 1200/1500 v5/6th Gen Intel(R) Core(TM) Gaussian Mixture Model - 1911</Display>
+    <Version>10.1.1.44</Version>
+    <Device>1911</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) USB 3.1 eXtensible Host Controller - 1.10 (Microsoft)</Display>
+    <Version>10.0.26100.8521</Version>
+    <Device>A36D</Device>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>FRMW</ComponentType>
+    <Display>NTC</Display>
+    <Version>7.2.0.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Management Engine WMI Provider</Display>
+    <Version>2512.7.1.0</Version>
+    <SoftwareComponentClassID>SWC\06657A6D-FE0F-4C90-8DDA-A1501C74CE4B</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Realtek Audio Universal Service</Display>
+    <Version>1.0.0.172</Version>
+    <SoftwareComponentClassID>SWC\VEN_10EC&amp;SID_0001</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Optane(TM) Memory and Storage Management Component</Display>
+    <Version>17.11.3.1010</Version>
+    <SoftwareComponentClassID>SWC\VID8086&amp;SW_RstHSA</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Realtek Asio Component</Display>
+    <Version>1.0.0.4</Version>
+    <SoftwareComponentClassID>SWC\VEN_10EC&amp;ASIO_ID_0001</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Realtek Audio Effects Component</Display>
+    <Version>11.0.6000.686</Version>
+    <SoftwareComponentClassID>SWC\VEN_10EC&amp;AID_0001</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Graphics Command Center</Display>
+    <Version>31.0.101.2114</Version>
+    <SoftwareComponentClassID>SWC\101.2114_VEN8086_IGCC</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) iCLS Client</Display>
+    <Version>1.76.95.0</Version>
+    <SoftwareComponentClassID>SWC\PROVIDER_INTEL_COMPONENT_ICLSCLIENT</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Graphics Control Panel</Display>
+    <Version>31.0.101.2114</Version>
+    <SoftwareComponentClassID>SWC\101.2114_VEN8086_GFXUI</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Dynamic Application Loader Host Interface</Display>
+    <Version>1.46.2024.221</Version>
+    <SoftwareComponentClassID>SWC\3C4852D6-D47B-4F46-B05E-B5EDC1AA440E</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Voice Clarity</Display>
+    <Version>10.0.26100.6710</Version>
+    <SoftwareComponentClassID>SWC\VEN_MSFT&amp;AUDIO_EFFECTPACK_VOICECLARITY</SoftwareComponentClassID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>AppUp.IntelOptaneMemoryandStorageManagement</Display>
+    <Version>18.1.1042.0</Version>
+    <PackageFamilyName>AppUp.IntelOptaneMemoryandStorageManagement_8j3eq9eme6ctt</PackageFamilyName>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>DellInc.DellCommandUpdate</Display>
+    <Version>5.7.276.0</Version>
+    <PackageFamilyName>DellInc.DellCommandUpdate_htrsf667h5kn2</PackageFamilyName>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>WavesAudio.WavesMaxxAudioProforDell</Display>
+    <Version>1.1.131.0</Version>
+    <PackageFamilyName>wavesaudio.wavesmaxxaudioprofordell_fh4rh281wavaa</PackageFamilyName>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>AppUp.IntelGraphicsExperience</Display>
+    <Version>1.100.5688.0</Version>
+    <PackageFamilyName>appup.intelgraphicsexperience_8j3eq9eme6ctt</PackageFamilyName>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>AppUp.IntelManagementandSecurityStatus</Display>
+    <Version>2537.8.7.0</Version>
+    <PackageFamilyName>appup.intelmanagementandsecuritystatus_8j3eq9eme6ctt</PackageFamilyName>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>27.20.100.8853</Version>
+    <ExtensionID>{DDAF6534-D7D4-424f-8098-98DE010F8D59}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>27.20.100.8190</Version>
+    <ExtensionID>{03DFC034-F113-4f1c-866F-F69B89ACD846}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>26.20.100.6952</Version>
+    <ExtensionID>{34ad3c73-8b76-451b-97b6-2da7f2caba7a}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>27.20.100.9664</Version>
+    <ExtensionID>{fc05f799-8e11-40a9-a184-0e631c213320}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>24.20.100.6287</Version>
+    <ExtensionID>{A633FC73-2C40-4861-90D8-67DE9346C712}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>27.20.100.8935</Version>
+    <ExtensionID>{bef94cd9-aa9b-40d6-83e2-739f26a74e66}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>26.20.100.7262</Version>
+    <ExtensionID>{E375C2EF-0F63-4c9f-835E-77BB42D356AF}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>30.0.100.9864</Version>
+    <ExtensionID>{484D90C0-B7D5-4864-8001-40D98AE06933}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>31.0.101.2114</Version>
+    <ExtensionID>{93801bca-c6bb-4e46-b551-9d19503c61f5}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>27.20.100.8853</Version>
+    <ExtensionID>{a911b671-4eb9-4c17-87c9-592438ee8628}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>30.0.101.1692</Version>
+    <ExtensionID>{71ce29e4-5422-4016-8688-25e3d8b9ed5c}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>26.20.100.7262</Version>
+    <ExtensionID>{653d5f52-39d5-4094-9e8c-9c0feb257bcf}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Dell</Display>
+    <Version>1.3.2.276</Version>
+    <ExtensionID>{3ED78669-04CF-413C-A8DF-553436CEA20F}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Realtek Semiconductor Corp.</Display>
+    <Version>6.0.8710.1</Version>
+    <ExtensionID>{C3A63EDD-2D27-4B66-B155-5E94B43D926A}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Corporation</Display>
+    <Version>17.11.3.1010</Version>
+    <ExtensionID>{8541b81c-193b-4f91-a86b-53df20c1974b}</ExtensionID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Motherboard resources</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>HID Keyboard Device</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>ACPI Fan</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>ACPI Processor Aggregator</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>  </Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Print to PDF</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Volume Manager</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Basic Display Driver</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>USB Input Device</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>ACPI Sleep Button</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>ACPI Thermal Zone</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>UMBus Enumerator</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Windows Management Interface for ACPI</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Volume</Display>
+    <Version>10.0.26100.5074</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Hyper-V Virtualization Infrastructure Driver</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>High precision event timer</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Composite Bus Enumerator</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Virtual Drive Enumerator</Display>
+    <Version>10.0.26100.1591</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>System timer</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Cypress UCM Client Peripheral Driver</Display>
+    <Version>1.2.1.88</Version>
+    <HardwareID>ACPI\VEN_CYP&amp;DEV_0004</HardwareID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Storage Spaces Controller</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>  (COM1)</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Kernel Debug Network Adapter</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>UMBus Root Bus Enumerator</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>HID-compliant consumer control device</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Micron 1100 SATA 256GB</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>ACPI x64-based PC</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>PCI Express Root Complex</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Numeric data processor</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>ACPI Power Button</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft ACPI-Compliant System</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft Basic Render Driver</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Waves Audio Effects Component</Display>
+    <Version>3.2.0.81</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft UEFI-Compliant System</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>DellInstrumentation Device</Display>
+    <Version>2.9.2.0</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Generic Monitor (L1718S )</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Speakers/Headphones (Realtek(R) Audio)</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Trusted Platform Module 2.0</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>System Firmware</Display>
+    <Version>10.0.26100.4768</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Power Engine Plug-in</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Xvdd SCSI Miniport</Display>
+    <Version>10.0.22027.2</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>HID-compliant mouse</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>USB Root Hub (USB 3.0)</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Remote Desktop USB Hub</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>NDIS Virtual Network Adapter Enumerator</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Programmable interrupt controller</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel(R) Serial IO GPIO Host Controller - INT3450</Display>
+    <Version>30.100.1816.3</Version>
+    <HardwareID>ACPI\VEN_INT&amp;DEV_3450</HardwareID>
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>System CMOS/real time clock</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Microsoft System Management BIOS Driver</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Motherboard resources</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Plug and Play Software Device Enumerator</Display>
+    <Version>10.0.26100.4202</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Remote Desktop Device Redirector Bus</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>USB Input Device</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Dell Inc. OptiPlex 7060</Display>
+    <Version>10.0.26100.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Motherboard resources</Display>
+    <Version>10.0.26100.1150</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>USB Input Device</Display>
+    <Version>10.0.26100.8521</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>Dell Command | Update for Windows Universal</Display>
+    <Version>5.7.0</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Intel Common PPM Package</Display>
+    <Version>0</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>Dell DBUtil Removal Utility</Display>
+    <Version>0</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Πρόγραμμα οδήγησης</ComponentType>
+    <Display>Dell AC Thermal PPkg Driver</Display>
+    <Version>0</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+  <SystemDetailsEntryItem>
+    <ComponentType>Εφαρμογή</ComponentType>
+    <Display>Dell SupportAssist OS Recovery Plugin for Dell Update</Display>
+    <Version>5.5.16.1</Version>
+    <ServiceTag />
+  </SystemDetailsEntryItem>
+</ArrayOfSystemDetailsEntryItem>

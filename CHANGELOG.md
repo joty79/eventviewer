@@ -1,5 +1,11 @@
 # CHANGELOG - eventviewer
 
+## [1.1.0] - 2026-06-19
+### Added
+- **Οργάνωση Documentation:** Δημιουργία φακέλου `doc/` και μεταφορά των αρχείων αναφοράς συστήματος (`MySystemInformation.xml`) και απομακρυσμένων διαγνωστικών.
+- **Αποκλεισμός Windows Update Drivers:** Προσθήκη πολιτικής registry `ExcludeWUDriversInQualityUpdate = 1` στο remote PC για την αποτροπή αντικατάστασης του storage driver.
+- **Καθαρισμός Intel RST:** Απεγκατάσταση των `oem39.inf`/`oem48.inf` (Intel RST) από το Driver Store του remote PC και απενεργοποίηση της υπηρεσίας `RstMwService`.
+
 ## [1.0.0] - 2026-06-19
 ### Added
 - **Αρχική Έκδοση:** Δημιουργία του διαγνωστικού εργαλείου `Analyze-EventViewer.ps1`.
