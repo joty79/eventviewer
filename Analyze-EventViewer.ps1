@@ -1,7 +1,7 @@
 # Analyze-EventViewer.ps1
 # Script to diagnose system crashes, WHEA errors, and volmgr dump failures (Event ID 161).
 # Supports both CLI output mode and interactive TUI mode (PS_UI_Blueprint).
-# Version 1.0.0
+# Version 1.1.1
 
 param(
     [Parameter(Mandatory = $false, HelpMessage = "Enter the target ComputerName or IP Address (e.g. 192.168.1.47)")]
@@ -795,7 +795,7 @@ function Show-ScrollableDiagText {
                 New-UiShortcutSegment -Text " Scroll ($scrollInfo)   " -Color $_C.Dim
                 New-UiShortcutSegment -Text "E" -Color $_C.Gold
                 New-UiShortcutSegment -Text " = export   " -Color $_C.Dim
-                New-UiShortcutSegment -Text "F" -Color $_C.Cyan
+                New-UiShortcutSegment -Text "F" -Color $_C.Info
                 New-UiShortcutSegment -Text " = fix FastStartup   " -Color $_C.Dim
                 New-UiShortcutSegment -Text "Esc" -Color $_C.Fail
                 New-UiShortcutSegment -Text " = back" -Color $_C.Dim

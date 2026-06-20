@@ -1,5 +1,9 @@
 # CHANGELOG - eventviewer
 
+## [1.1.1] - 2026-06-21
+### Fixed
+- **Διόρθωση σφάλματος Color binding:** Διορθώθηκε το σφάλμα `Cannot bind argument to parameter 'Color' because it is an empty string` στο TUI αντικαθιστώντας το μη υπαρκτό `$_C.Cyan` με το `$_C.Info`.
+
 ## [1.1.0] - 2026-06-19
 ### Added
 - **Οργάνωση Documentation:** Δημιουργία φακέλου `doc/` και μεταφορά των αρχείων αναφοράς συστήματος (`MySystemInformation.xml`) και απομακρυσμένων διαγνωστικών.
