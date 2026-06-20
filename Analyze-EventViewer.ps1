@@ -1,7 +1,7 @@
 # Analyze-EventViewer.ps1
 # Script to diagnose system crashes, WHEA errors, and volmgr dump failures (Event ID 161).
 # Supports both CLI output mode and interactive TUI mode (PS_UI_Blueprint).
-# Version 1.1.1
+# Version 1.1.2
 
 param(
     [Parameter(Mandatory = $false, HelpMessage = "Enter the target ComputerName or IP Address (e.g. 192.168.1.47)")]
@@ -988,7 +988,7 @@ function Clear-TuiScreen {
 
 # Main TUI Loop Control Panel
 function Invoke-EventViewerTui {
-    Init-TuiHost
+    Initialize-TuiHost
     Clear-TuiScreen
     
     $selectedIndex = 0

@@ -1,5 +1,9 @@
 # CHANGELOG - eventviewer
 
+## [1.1.2] - 2026-06-21
+### Fixed
+- **Διόρθωση σφάλματος εκκίνησης TUI:** Διορθώθηκε το στιγμιαίο σφάλμα (red flash) κατά την εκκίνηση του TUI, αντικαθιστώντας το λανθασμένο όνομα συνάρτησης `Init-TuiHost` με το σωστό `Initialize-TuiHost`.
+
 ## [1.1.1] - 2026-06-21
 ### Fixed
 - **Διόρθωση σφάλματος Color binding:** Διορθώθηκε το σφάλμα `Cannot bind argument to parameter 'Color' because it is an empty string` στο TUI αντικαθιστώντας το μη υπαρκτό `$_C.Cyan` με το `$_C.Info`.
