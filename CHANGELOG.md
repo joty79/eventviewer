@@ -1,5 +1,15 @@
 # CHANGELOG - eventviewer
 
+## [1.2.0] - 2026-06-30
+### Added
+- **Διάγνωση & Επισκευή DESKTOP-8LCO8S2 (192.168.1.68):** 
+  - Εντοπισμός dirty flags στα partitions του εξωτερικού USB δίσκου (`WDC WD50 00LPCX-24C6HT0`) που προκαλούσαν σφάλματα NTFS Event ID 98 και boot-loops/hangs.
+  - Επιτυχής εκτέλεση `Repair-Volume` σε 3 προβληματικούς τόμους.
+  - Απενεργοποίηση του USB Selective Suspend μέσω Registry (`DisableSelectiveSuspend = 1` για `USBHUB3` & `usbhub` parameters).
+  - Απενεργοποίηση του Fast Startup (`HiberbootEnabled = 0`) για την αποτροπή μελλοντικού NTFS corruption.
+  - Δημιουργία αναλυτικής αναφοράς `DIAGNOSIS_DESKTOP-8LCO8S2.md` στο root του αποθετηρίου για κοινή χρήση με Codex.
+  - Δημιουργία του verifier script `Verify-DiagnosticsFixes.ps1` για τον εύκολο έλεγχο όλων των ρυθμίσεων σταθερότητας δίσκων/USB.
+
 ## [1.1.2] - 2026-06-21
 ### Fixed
 - **Διόρθωση σφάλματος εκκίνησης TUI:** Διορθώθηκε το στιγμιαίο σφάλμα (red flash) κατά την εκκίνηση του TUI, αντικαθιστώντας το λανθασμένο όνομα συνάρτησης `Init-TuiHost` με το σωστό `Initialize-TuiHost`.

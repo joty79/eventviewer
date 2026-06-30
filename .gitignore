@@ -3,4 +3,5 @@ history.json
 exports/
 *.log
 *.exe
+scratch*
 
