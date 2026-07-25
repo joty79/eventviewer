@@ -25,6 +25,24 @@
 
 ---
 
+## 🔵 2.1 Βήμα-προς-Βήμα Μεθοδολογία & Απόδειξη Συμπεράσματος (Step-by-Step Diagnostic Methodology)
+
+Η διάγνωση και το τελικό συμπέρασμα προέκυψαν βήμα-προς-βήμα από τα εξής ακριβή στοιχεία:
+
+* **Βήμα 1 (Ανάλυση XML Kernel-Power ID 41):** 
+  Αντλήσαμε τα XML δεδομένα των συμβάντων 41 (`Get-WinEvent -FilterHashtable @{LogName='System'; Id=41}`). Διαπιστώσαμε ότι το `BugcheckCode = 0` (όχι BSOD) και το `PowerButtonTimestamp = 134294383680114449` ήταν θετικό. Αυτό **απέδειξε** ότι ο υπολογιστής έφαγε ολικό πάγωμα (Hard Lockup) και ο χρήστης αναγκάστηκε να πατήσει παρατεταμένα το κουμπί τροφοδοσίας.
+* **Βήμα 2 (Σάρωση Συσκευών PnP):** 
+  Εκτελέσαμε σάρωση συσκευών `Win32_PnPEntity` για `ConfigManagerErrorCode != 0`. Εντοπίστηκε η συσκευή **`AMD PSP 11.0 Device`** με κωδικό σφάλματος **`22` (Disabled)**. Στους επεξεργαστές AMD Ryzen (Zen 5 / AM5), η απουσία/απενεργοποίηση του AMD PSP προκαλεί ακαριαίο πάγωμα κατά τις μεταβάσεις σε C6 Idle sleep states.
+* **Βήμα 3 (Έλεγχος Fast Startup & Hiberboot):** 
+  Ελέγξαμε το μητρώο `HKLM:\SYSTEM\...\Power\HiberbootEnabled`, το οποίο επέστρεψε **`1` (Enabled)**. Κατά το hard restart, τα Windows αποθήκευσαν φθαρμένη συνεδρία στο `hiberfil.sys`.
+* **Βήμα 4 (Διασταύρωση Safe Mode vs Normal Mode):** 
+  Στο Safe Mode τα Windows παρακάμπτουν το Fast Startup και φορτώνουν τον `BasicRender` driver της Microsoft. Στο Normal Mode, τα Windows προσπαθούσαν να επαναφέρουν τη φθαρμένη συνεδρία `hiberfil.sys` φορτώνοντας τον οδηγό της NVIDIA (`nvlddmkm.sys`), προκαλώντας κατάρρευση σε Μαύρη Οθόνη.
+* **Βήμα 5 (Ζωντανή Επαλήθευση μετά την Επισκευή):** 
+  Μετά τις ενέργειες (απενεργοποίηση Fast Startup, ενεργοποίηση AMD PSP, TdrDelay 10s και ρυθμίσεις BIOS), εκτελέσαμε ζωντανή επαλήθευση σε Normal Mode: `Boot Mode: Normal Boot (Clean)`, `AMD PSP Status: OK (ErrorCode: 0)`, `Zero PnP device errors`.
+
+
+---
+
 ## 🔵 3. Τεχνική Ανάλυση & Ευρήματα (Technical Analysis)
 
 ### 🔸 Αιτία 1: AMD PSP 11.0 Device Disabled (Code 22)
