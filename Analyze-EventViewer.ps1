@@ -353,15 +353,20 @@ function Get-DiagnosticsData {
         $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
         $ram = Get-CimInstance Win32_PhysicalMemory | Select-Object DeviceLocator, Capacity, Speed, Manufacturer, PartNumber
         
-        # Fast Startup Configuration
+        # SafeBoot & Fast Startup Configuration
+        $safeBootOption = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Option' -ErrorAction SilentlyContinue).Option
+        $safeBootStatus = if ($safeBootOption -eq 1) { "Safe Mode (Minimal)" } elseif ($safeBootOption -eq 2) { "Safe Mode (With Networking)" } else { "Normal Boot" }
+
         $fastStartup = 0
         try {
             $fastStartup = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -ErrorAction SilentlyContinue).HiberbootEnabled
             if ($null -eq $fastStartup) { $fastStartup = 0 }
         } catch {}
 
-        # Dump Configuration
+        # Dump Configuration & Path Resolution
         $crashControl = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -ErrorAction SilentlyContinue
+        $dumpFilePath = if ($crashControl.DumpFile) { [Environment]::ExpandEnvironmentVariables($crashControl.DumpFile) } else { "C:\Windows\MEMORY.DMP" }
+        $minidumpDirPath = if ($crashControl.MinidumpDir) { [Environment]::ExpandEnvironmentVariables($crashControl.MinidumpDir) } else { "C:\Windows\Minidump" }
         
         # Physical Disks Info
         $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object DeviceId, FriendlyName, OperationalStatus, HealthStatus, Size
@@ -369,9 +374,26 @@ function Get-DiagnosticsData {
             Get-PhysicalDisk -ErrorAction SilentlyContinue | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | Select-Object DeviceId, Wear, Temperature
         } catch { @() }
 
-        # Check for dump files
-        $memoryDmp = Get-Item -Path "C:\Windows\MEMORY.DMP" -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
-        $minidumps = Get-ChildItem -Path "C:\Windows\Minidump" -Filter "*.dmp" -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
+        # Check for dump files on configured paths
+        $memoryDmp = Get-Item -Path $dumpFilePath -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
+        $minidumps = Get-ChildItem -Path $minidumpDirPath -Filter "*.dmp" -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
+
+        # PnP Hardware Device Errors & Disabled Devices (ConfigManagerErrorCode != 0)
+        $pnpErrors = [System.Collections.Generic.List[object]]::new()
+        try {
+            $errDevs = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object { $_.ConfigManagerErrorCode -ne 0 }
+            if ($errDevs) {
+                foreach ($d in $errDevs) {
+                    $pnpErrors.Add([PSCustomObject]@{
+                        Name                   = $d.Name
+                        ConfigManagerErrorCode = $d.ConfigManagerErrorCode
+                        Status                 = $d.Status
+                        Manufacturer           = $d.Manufacturer
+                        DeviceID               = $d.DeviceID
+                    })
+                }
+            }
+        } catch {}
 
         # Read Crash / Unexpected Shutdown / Boot / volmgr Events
         # ID 41: Kernel-Power unexpected reboot
@@ -386,6 +408,19 @@ function Get-DiagnosticsData {
                     $decoded = ""
                     if ($e.Id -eq 161 -and $e.Message -match 'BugCheckProgress:\s*([0-9A-Fa-f]+)') {
                         $decoded = Decode-VolmgrCode -progressStr $Matches[1]
+                    } elseif ($e.Id -eq 41) {
+                        try {
+                            $xml = [xml]$e.ToXml()
+                            $dataHash = @{}
+                            foreach ($d in $xml.Event.EventData.Data) { $dataHash[$d.Name] = $d.'#text' }
+                            $bc = if ($dataHash.ContainsKey('BugcheckCode')) { $dataHash['BugcheckCode'] } else { '0' }
+                            $pb = if ($dataHash.ContainsKey('PowerButtonTimestamp')) { $dataHash['PowerButtonTimestamp'] } else { '0' }
+                            if ($bc -eq '0' -and $pb -ne '0' -and $pb -ne '' -and $pb -ne '0x0') {
+                                $decoded = "Hard restart via Power Button press (BugcheckCode=0, PowerButtonTimestamp=$pb)."
+                            } elseif ($bc -ne '0' -and $bc -ne '0x0') {
+                                $decoded = "BSOD BugcheckCode: 0x{0:X}" -f [int64]$bc
+                            }
+                        } catch {}
                     }
                     
                     $crashEvents.Add([PSCustomObject]@{
@@ -445,21 +480,24 @@ function Get-DiagnosticsData {
             OSCaption         = $os.Caption
             OSVersion         = $os.Version
             Ram               = $ram
+            SafeBootStatus    = $safeBootStatus
             FastStartup       = $fastStartup
             CrashControl      = [PSCustomObject]@{
                 CrashDumpEnabled = $crashControl.CrashDumpEnabled
-                DumpFile         = $crashControl.DumpFile
-                MinidumpDir      = $crashControl.MinidumpDir
+                DumpFile         = $dumpFilePath
+                MinidumpDir      = $minidumpDirPath
             }
             Disks             = $disks
             Wear              = $wear
             MemoryDmp         = $memoryDmp
             Minidumps         = $minidumps
+            PnpErrors         = $pnpErrors
             CrashEvents       = $crashEvents
             WheaEvents        = $wheaEvents
             SystemWheaEvents  = $systemWheaEvents
         }
     }
+
 
     if ($isTargetRemote) {
         Add-ToTrustedHosts -Target $TargetComputer
@@ -504,8 +542,9 @@ function Get-FormattedDiagLines {
     }
     
     $lines.Add("")
-    $lines.Add("=== POWER CONFIGURATION ===")
+    $lines.Add("=== POWER & BOOT CONFIGURATION ===")
     $startupText = if ($diagData.FastStartup -eq 1) { "ENABLED (Ενεργό - Συνιστάται Απενεργοποίηση)" } else { "DISABLED (Απενεργοποιημένο - OK)" }
+    $lines.Add("Boot Environment:         $($diagData.SafeBootStatus)")
     $lines.Add("Fast Startup (Hiberboot): $startupText")
     
     $lines.Add("")
@@ -535,9 +574,24 @@ function Get-FormattedDiagLines {
             $lines.Add("  - $([System.IO.Path]::GetFileName($d.FullName)) | Size: $([Math]::Round($d.Length/1KB, 2)) KB | Last Written: $($d.LastWriteTime)")
         }
     } else {
-        $lines.Add("Minidumps: None found in C:\Windows\Minidump")
+        $lines.Add("Minidumps: None found in $($diagData.CrashControl.MinidumpDir)")
     }
     
+    $lines.Add("")
+    $lines.Add("=== PNP HARDWARE DEVICE ERRORS & DISABLED DEVICES ===")
+    if (-not $diagData.PnpErrors -or $diagData.PnpErrors.Count -eq 0) {
+        $lines.Add("  No PnP hardware device errors found.")
+    } else {
+        foreach ($dev in $diagData.PnpErrors) {
+            $errCodeText = switch ($dev.ConfigManagerErrorCode) {
+                22 { "Code 22 (Disabled in Device Manager or BIOS)" }
+                31 { "Code 31 (Driver failed to load / missing driver)" }
+                Default { "Code $($dev.ConfigManagerErrorCode)" }
+            }
+            $lines.Add("⚠️ [$($dev.Name)] | Status: $errCodeText | Manufacturer: $($dev.Manufacturer) | DeviceID: $($dev.DeviceID)")
+        }
+    }
+
     $lines.Add("")
     $lines.Add("=== STORAGE DRIVES ===")
     foreach ($d in $diagData.Disks) {
@@ -588,28 +642,43 @@ function Get-FormattedDiagLines {
 
     $lines.Add("")
     $lines.Add("=== DIAGNOSTICS CONCLUSION & RECOMMENDATIONS ===")
+    $recIdx = 1
+
+    $amdPspError = $diagData.PnpErrors | Where-Object { $_.Name -like "*AMD PSP*" -or $_.Name -like "*Platform Security*" }
+    if ($amdPspError) {
+        $lines.Add("🔴 [$recIdx] Εντοπίστηκε Σφάλμα στο AMD PSP Device (Code 22/31):")
+        $lines.Add("       Η συσκευή AMD PSP 11.0 (Platform Security Processor / fTPM) είναι απενεργοποιημένη ή λείπει ο οδηγός chipset.")
+        $lines.Add("       Στα συστήματα AMD Ryzen, αυτό προκαλεί ολικό πάγωμα (Hard Freeze / Lockup) κατά την αδράνεια (Idle/Sleep).")
+        $lines.Add("       Συνιστάται επανεγκατάσταση του AMD Chipset Driver και ενεργοποίηση του AMD PSP / fTPM στο BIOS.")
+        $recIdx++
+    }
+
     $hasVolmgr161 = $diagData.CrashEvents | Where-Object { $_.Id -eq 161 }
     if ($hasVolmgr161) {
-        $lines.Add("🔴 [1] Εντοπίστηκε volmgr Event ID 161 (Αποτυχία Dump):")
+        $lines.Add("🔴 [$recIdx] Εντοπίστηκε volmgr Event ID 161 (Αποτυχία Dump):")
         $lines.Add("       Το λειτουργικό σύστημα κατέρρευσε (BSOD) αλλά δεν κατάφερε να γράψει dump αρχείο")
         $lines.Add("       διότι η επικοινωνία με το δίσκο SSD χάθηκε ακαριαία (Device Protocol / Data Error).")
         $lines.Add("       Αυτό δείχνει αστάθεια PCIe bus, controller δίσκου ή τροφοδοσίας του SSD.")
+        $recIdx++
     }
     
     if ($diagData.FastStartup -eq 1) {
-        $lines.Add("🟡 [2] Το Fast Startup είναι Ενεργοποιημένο:")
+        $lines.Add("🟡 [$recIdx] Το Fast Startup είναι Ενεργοποιημένο:")
         $lines.Add("       Συνιστάται η απενεργοποίησή του για να αποφευχθούν σφάλματα power-state transitions")
         $lines.Add("       που προκαλούν κρασαρίσματα κατά την εκκίνηση/τερματισμό.")
+        $recIdx++
     }
     
     if ($diagData.BiosVersion -notlike "*1.32.*" -and ($diagData.Motherboard -like "*OptiPlex 7060*" -or $diagData.BiosVersion -match '1\.(1[0-9]|2[0-9]|3[0-1])\.')) {
-        $lines.Add("🔵 [3] Outdated BIOS ($($diagData.BiosVersion)):")
+        $lines.Add("🔵 [$recIdx] Outdated BIOS ($($diagData.BiosVersion)):")
         $lines.Add("       Η αναβάθμιση στην έκδοση 1.32.0 θα ενημερώσει το microcode της CPU και τις ρυθμίσεις")
         $lines.Add("       σταθερότητας του TPM και του chipset.")
+        $recIdx++
     }
     
     return $lines
 }
+
 
 # CSV/Markdown Data Export
 function Export-DiagnosticsReport {

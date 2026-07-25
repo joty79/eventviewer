@@ -15,6 +15,19 @@
 ---
 
 ## 🔵 3. Ιστορικό Διαγνώσεων & Troubleshooting Memory
+### 🔸 PowerShell Inspection Parser Guardrail
+* **Ημερομηνία:** 8 Ιουλίου 2026
+* **Πρόβλημα:** Σε ad hoc inspection command ξαναχρησιμοποιήθηκε `} | Format-List` αμέσως μετά από `foreach` statement και έδωσε `An empty pipe element is not allowed`.
+* **Root cause:** Τα PowerShell statements όπως `foreach (...) { ... }` δεν πρέπει να γίνονται pipe έτσι σαν expression.
+* **Κανόνας:** Για inspection commands, πρώτα ανάθεση (`$items = foreach (...) { ... }`) και μετά pipe (`$items | Format-List`). Αυτό κρατάει τα diagnostics γρήγορα και parser-safe.
+
+### 🔸 DESKTOP-CONSTRU RAM/Slot Isolation Snapshot
+* **Ημερομηνία:** 8 Ιουλίου 2026
+* **Πρόβλημα:** Το `DESKTOP-CONSTRU` πάγωνε σε 2-5 λεπτά μετά το login, με repeated `Kernel-Power 41` / `BugcheckCode = 0` και χωρίς καθαρό BSOD dump.
+* **Root cause υπό διερεύνηση:** Δεν έχει αποδειχθεί ακόμη. Το SSD δείχνει healthy στα live checks, Bitdefender αφαιρέθηκε, Fast Startup είναι disabled, και τώρα απομονώνεται RAM module/slot.
+* **Κανόνας:** Μην υπερεστιάζεις μόνο στο RAM χωρίς evidence, αλλά κράτα ξεκάθαρο test matrix. Γνωστό: ένα module στο πρώτο slot πάγωσε ξανά. Τρέχον test: μόνο το δεύτερο module στο `DIMM2`, Micron `16KTF1G64AZ-1G6E1`, serial `15221016`, 8 GB DDR3 1600.
+* **Validation:** WinRM/DeviceCheck/EventViewer diagnostics πέρασαν μετά τη διακοπή του stress workload. Έξι ελαφριά heartbeat samples επέστρεψαν OK από περίπου 17.3 έως 20.1 λεπτά uptime. OCCT/CPU-Z παρέμεναν open αλλά idle, όχι active stress.
+
 ### 🔸 Διάγνωση στο Remote PC 192.168.1.47 (Dell OptiPlex 7060)
 * **Ημερομηνία:** 19 Ιουνίου 2026
 * **Πρόβλημα:** Ξαφνικά κρασαρίσματα (BSOD/Freezes) κατά το login ή τη διάρκεια λειτουργίας μετά από αντικατάσταση μητρικής.
@@ -25,3 +38,15 @@
 * **Προτεινόμενες Ενέργειες:**
   - Χειροκίνητη εγκατάσταση του BIOS Update `1.32.0` (το αρχείο λήφθηκε και επαληθεύτηκε στο `d:\Users\joty79\scripts\eventviewer\OptiPlex_7060_1.32.0.exe`).
   - Απενεργοποίηση του Fast Startup (HiberbootEnabled = 0).
+
+### 🔸 Διάγνωση στο PC NEOS / 192.168.1.6 (AMD Ryzen 7 9700X / MSI X870 Tomahawk)
+* **Ημερομηνία:** 25 Ιουλίου 2026
+* **Πρόβλημα:** Πάγωμα υπολογιστή (Hard Freeze) κατά την επιστροφή του χρήστη (idle status), χωρίς παραγωγή BSOD dump file.
+* **Βασικά Ευρήματα:**
+  1. **AMD PSP 11.0 Device Error (Code 22):** Η συσκευή AMD PSP (Platform Security Processor / fTPM) ήταν απενεργοποιημένη στο Device Manager / BIOS. Στους επεξεργαστές AMD Ryzen, η απουσία ή απενεργοποίηση του AMD PSP προκαλεί ολικό πάγωμα κατά τις μεταβάσεις χαμηλής ισχύος (Idle/Sleep C-States).
+  2. **Kernel-Power Event ID 41 (`BugcheckCode = 0`, `PowerButtonTimestamp > 0`):** Επιβεβαιώθηκε ότι ο χρήστης αναγκάστηκε να πατήσει παρατεταμένα το Power Button για hard restart.
+  3. **Fast Startup:** Ήταν ενεργοποιημένο (HiberbootEnabled = 1).
+* **Ενέργειες & Βελτιώσεις:**
+  - Ενεργοποίηση/Επανεγκατάσταση του AMD Chipset Driver (AMD PSP 11.0 Device) και απενεργοποίηση Fast Startup.
+  - Αναβάθμιση του `Analyze-EventViewer.ps1` με αυτόματο εντοπισμό PnP Device Errors (Code 22/31), dynamic dump path resolution (`D:\Temp\CrashDumps`), και XML parsing του Kernel-Power 41.
+

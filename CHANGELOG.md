@@ -1,5 +1,23 @@
 # CHANGELOG - eventviewer
 
+## [1.4.0] - 2026-07-25
+### Added
+- **PnP Hardware Device Error Detection:** Integrated `Win32_PnPEntity` queries for `ConfigManagerErrorCode != 0` to flag disabled/failing devices (e.g. AMD PSP 11.0 / Code 22 fTPM errors and Code 31 driver loading failures).
+- **Dynamic Memory Dump Path Resolution:** Updated `Analyze-EventViewer.ps1` to resolve `$crashControl.DumpFile` and `$crashControl.MinidumpDir` from CrashControl registry keys instead of hardcoding `C:\Windows\Minidump`.
+- **Event ID 41 XML Parameter Decoding:** Added XML payload parsing to distinguish BSOD BugCheck codes from physical Power Button forced hard-reboots (`BugcheckCode = 0`, `PowerButtonTimestamp > 0`).
+- **SafeBoot Environment Reporting:** Added `SafeBootStatus` inspection to flag whether a target PC is booted in Safe Mode (Minimal or With Networking) vs Normal Boot.
+
+## [1.3.0] - 2026-07-09
+
+### Added
+- **Διαγνωστικό Script LogonUI Freezes (`Diagnose-LogonUIFreezes.ps1`):**
+  - Δημιουργία ολοκληρωμένου διαγνωστικού script PowerShell 7 για τον εντοπισμό τυχαίων παγωμάτων στην οθόνη Logon (LogonUI.exe) και προβλημάτων σύνδεσης με Microsoft Account (MSA).
+  - TPM & Hardware Security Verification (Get-Tpm, Win32_Tpm CIM checks, System/TPM logs scan).
+  - NGC Folder & Windows Hello Integrity verification (Permissions, non-destructive file modification scan).
+  - Authentication & Token Broker Logging extraction (User Device Registration, AAD Operational, Application logs).
+  - System Configuration Audit (Registry HiberbootEnabled check, 5 last unexpected/dirty shutdowns).
+  - Πλήρως συμβατό με PowerShell 7 και με μορφοποιημένη έξοδο για το Windows Terminal.
+
 ## [1.2.0] - 2026-06-30
 ### Added
 - **Διάγνωση & Επισκευή DESKTOP-8LCO8S2 (192.168.1.68):** 
