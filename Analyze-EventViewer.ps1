@@ -359,9 +359,17 @@ function Get-DiagnosticsData {
 
         $fastStartup = 0
         try {
-            $fastStartup = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -ErrorAction SilentlyContinue).HiberbootEnabled
-            if ($null -eq $fastStartup) { $fastStartup = 0 }
+            $hiberboot = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -ErrorAction SilentlyContinue).HiberbootEnabled
+            $hiberGlobal = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "HibernateEnabled" -ErrorAction SilentlyContinue).HibernateEnabled
+            $hiberFileExists = Test-Path -Path "$env:SystemDrive\hiberfil.sys" -ErrorAction SilentlyContinue
+
+            if ($hiberboot -eq 1 -and ($null -eq $hiberGlobal -or $hiberGlobal -ne 0) -and $hiberFileExists) {
+                $fastStartup = 1
+            } else {
+                $fastStartup = 0
+            }
         } catch {}
+
 
         # Dump Configuration & Path Resolution
         $crashControl = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -ErrorAction SilentlyContinue
