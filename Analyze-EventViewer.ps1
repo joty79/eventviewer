@@ -647,11 +647,11 @@ function Get-FormattedDiagLines {
     $amdPspError = $diagData.PnpErrors | Where-Object { $_.Name -like "*AMD PSP*" -or $_.Name -like "*Platform Security*" }
     if ($amdPspError) {
         $lines.Add("🔴 [$recIdx] Εντοπίστηκε Σφάλμα στο AMD PSP Device (Code 22/31):")
-        $lines.Add("       Η συσκευή AMD PSP 11.0 (Platform Security Processor / fTPM) είναι απενεργοποιημένη ή λείπει ο οδηγός chipset.")
-        $lines.Add("       Στα συστήματα AMD Ryzen, αυτό προκαλεί ολικό πάγωμα (Hard Freeze / Lockup) κατά την αδράνεια (Idle/Sleep).")
-        $lines.Add("       Συνιστάται επανεγκατάσταση του AMD Chipset Driver και ενεργοποίηση του AMD PSP / fTPM στο BIOS.")
+        $lines.Add("       Η συσκευή AMD PSP 11.0 (Platform Security Processor / fTPM) είναι απενεργοποιημένη (Code 22) ή λείπει ο οδηγός chipset.")
+        $lines.Add("       Συνιστάται ενεργοποίηση της συσκευής, επανεγκατάσταση των AMD Chipset Drivers και επαλήθευση του fTPM στο BIOS.")
         $recIdx++
     }
+
 
     $hasVolmgr161 = $diagData.CrashEvents | Where-Object { $_.Id -eq 161 }
     if ($hasVolmgr161) {

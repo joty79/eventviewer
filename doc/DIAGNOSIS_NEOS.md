@@ -32,7 +32,7 @@
 * **Βήμα 1 (Ανάλυση XML Kernel-Power ID 41):** 
   Αντλήσαμε τα XML δεδομένα των συμβάντων 41 (`Get-WinEvent -FilterHashtable @{LogName='System'; Id=41}`). Διαπιστώσαμε ότι το `BugcheckCode = 0` (όχι BSOD) και το `PowerButtonTimestamp = 134294383680114449` ήταν θετικό. Αυτό **απέδειξε** ότι ο υπολογιστής έφαγε ολικό πάγωμα (Hard Lockup) και ο χρήστης αναγκάστηκε να πατήσει παρατεταμένα το κουμπί τροφοδοσίας.
 * **Βήμα 2 (Σάρωση Συσκευών PnP):** 
-  Εκτελέσαμε σάρωση συσκευών `Win32_PnPEntity` για `ConfigManagerErrorCode != 0`. Εντοπίστηκε η συσκευή **`AMD PSP 11.0 Device`** με κωδικό σφάλματος **`22` (Disabled)**. Στους επεξεργαστές AMD Ryzen (Zen 5 / AM5), η απουσία/απενεργοποίηση του AMD PSP προκαλεί ακαριαίο πάγωμα κατά τις μεταβάσεις σε C6 Idle sleep states.
+  Εκτελέσαμε σάρωση συσκευών `Win32_PnPEntity` για `ConfigManagerErrorCode != 0`. Εντοπίστηκε η συσκευή **`AMD PSP 11.0 Device`** με κωδικό σφάλματος **`22` (CM_PROB_DISABLED / Disabled στο Device Manager)**. Η συσκευή ενεργοποιήθηκε επειδή αποτελεί βασικό platform/security component της AMD και η απενεργοποίησή της δεν αποτελεί φυσιολογική διαμόρφωση.
 * **Βήμα 3 (Έλεγχος Fast Startup & Hiberboot):** 
   Ελέγξαμε το μητρώο `HKLM:\SYSTEM\...\Power\HiberbootEnabled`, το οποίο επέστρεψε **`1` (Enabled)**. Κατά το hard restart, τα Windows αποθήκευσαν φθαρμένη συνεδρία στο `hiberfil.sys`.
 * **Βήμα 4 (Διασταύρωση Safe Mode vs Normal Mode):** 
@@ -45,13 +45,14 @@
 
 ## 🔵 3. Τεχνική Ανάλυση & Ευρήματα (Technical Analysis)
 
-### 🔸 Αιτία 1: AMD PSP 11.0 Device Disabled (Code 22)
+### 🔸 Εύρημα 1: AMD PSP 11.0 Device Disabled (Code 22)
 * **Εύρημα:** Η συσκευή `AMD PSP 11.0 Device` (Platform Security Processor / fTPM, `PCI\VEN_1022&DEV_1649...`) ήταν απενεργοποιημένη στο Device Manager (`ConfigManagerErrorCode = 22`).
-* **Μηχανισμός:** Στους επεξεργαστές AMD Ryzen 9000 Series (AM5), όταν η συσκευή AMD PSP / fTPM είναι απενεργοποιημένη ή λείπει ο οδηγός chipset, οι μεταβάσεις του επεξεργαστή σε χαμηλή κατανάλωση ενέργειας κατά την αδράνεια (Idle C6 States / Display Sleep) προκαλούν ολικό ακαριαίο πάγωμα του υπολογιστή (Hard Lockup).
+* **Τεχνική Αξιολόγηση:** Το `Code 22` υποδεικνύει αποκλειστικά ότι το PnP device node είχε απενεργοποιηθεί στα Windows. Η ενεργοποίηση της συσκευής ήταν ορθή ενέργεια καθώς αποτελεί βασικό platform component της AMD, αλλά από τα διαθέσιμα δεδομένα δεν αποδεικνύεται άμεσος μηχανισμός C6 handshake deadlock. Το εύρημα σχετίζεται πιθανώς με μη πλήρη/προβληματική εγκατάσταση των AMD chipset drivers.
 
-### 🔸 Αιτία 2: Φθαρμένη Κατάσταση Συνεδρίας (Fast Startup / Hiberboot)
+### 🔸 Εύρημα 2: Φθαρμένη Κατάσταση Συνεδρίας (Fast Startup / Hiberboot)
 * **Εύρημα:** Το Fast Startup (`HiberbootEnabled = 1`) ήταν ενεργοποιημένο.
 * **Μηχανισμός:** Κατά το hard restart (Power Button timestamp `134294383680114449`), τα Windows αποθήκευσαν φθαρμένη κατάσταση στο `hiberfil.sys`. Κάθε προσπάθεια εκκίνησης σε Normal Mode προσπαθούσε να επαναφέρει τη φθαρμένη συνεδρία, προκαλώντας κατάρρευση του οδηγού κάρτας γραφικών NVIDIA (`nvlddmkm.sys`) / DWM σε Μαύρη Οθόνη.
+
 
 ---
 
