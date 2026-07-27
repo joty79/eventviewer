@@ -11,17 +11,24 @@ param(
     [System.Management.Automation.PSCredential]$Credential,
 
     [Parameter(Mandatory = $false)]
+    [string]$UserName = 'Administrator',
+
+    [Parameter(Mandatory = $false)]
+    [switch]$BlankPassword,
+
+    [Parameter(Mandatory = $false)]
     [switch]$Interactive
 )
 
 $winRMDiscoveryManifest = Join-Path -Path $PSScriptRoot -ChildPath '.assets\WinRMDiscovery\WinRMDiscovery.psd1'
-$winRMConnectionManifest = Join-Path -Path $PSScriptRoot -ChildPath '.assets\WinRMConnection\WinRMConnection.psd1'
-foreach ($moduleManifest in @($winRMDiscoveryManifest, $winRMConnectionManifest)) {
-    if (-not (Test-Path -LiteralPath $moduleManifest -PathType Leaf)) {
-        throw "Required shared WinRM module not found: $moduleManifest"
+$eventViewerConnector = Join-Path -Path $PSScriptRoot -ChildPath 'internal\EventViewer\Connect-EventViewerTarget.ps1'
+foreach ($requiredPath in @($winRMDiscoveryManifest, $eventViewerConnector)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+        throw "Required shared WinRM component not found: $requiredPath"
     }
-    Import-Module -Name $moduleManifest -Force -ErrorAction Stop
 }
+Import-Module -Name $winRMDiscoveryManifest -Force -ErrorAction Stop
+. $eventViewerConnector
 
 function Write-EventViewerWinRMConnectionStatus {
     param([Parameter(Mandatory)]$Status)
@@ -346,7 +353,10 @@ function Get-NetDiscoveredHosts {
 function Get-DiagnosticsData {
     param(
         [string]$TargetComputer,
-        [System.Management.Automation.PSCredential]$TargetCred
+        [System.Management.Automation.PSCredential]$TargetCred,
+        [string]$TargetUserName = 'Administrator',
+        [string[]]$TargetAliases,
+        [switch]$TargetBlankPassword
     )
     
     $isTargetRemote = -not [string]::IsNullOrEmpty($TargetComputer) -and 
@@ -543,15 +553,19 @@ function Get-DiagnosticsData {
 
     if ($isTargetRemote) {
         Add-ToTrustedHosts -Target $TargetComputer
-        $session = Connect-WinRMSession `
+        $session = Connect-EventViewerTarget `
             -ComputerName $TargetComputer `
+            -ComputerAlias $TargetAliases `
+            -UserName $TargetUserName `
             -Credential $TargetCred `
-            -OnStatus ${function:Write-EventViewerWinRMConnectionStatus}
+            -BlankPassword:$TargetBlankPassword
         try {
             $remoteData = Invoke-Command -Session $session -ScriptBlock $diagBlock -ErrorAction Stop
+            $remoteData | Add-Member -NotePropertyName WinRMTarget -NotePropertyValue $TargetComputer -Force
+            $remoteData | Add-Member -NotePropertyName WinRMUserName -NotePropertyValue $session.EventViewerCredential.UserName -Force
             return $remoteData
         } finally {
-            Remove-PSSession $session
+            Remove-PSSession -Session $session
         }
     } else {
         return Invoke-Command -ScriptBlock $diagBlock
@@ -792,7 +806,8 @@ function Export-DiagnosticsReport {
 function Disable-FastStartupAction {
     param(
         [string]$TargetComputer,
-        [System.Management.Automation.PSCredential]$TargetCred
+        [System.Management.Automation.PSCredential]$TargetCred,
+        [string]$TargetUserName = 'Administrator'
     )
     
     $isTargetRemote = -not [string]::IsNullOrEmpty($TargetComputer) -and 
@@ -805,17 +820,18 @@ function Disable-FastStartupAction {
     }
     
     if ($isTargetRemote) {
-        $session = Connect-WinRMSession `
+        $session = Connect-EventViewerTarget `
             -ComputerName $TargetComputer `
+            -UserName $TargetUserName `
             -Credential $TargetCred `
-            -OnStatus ${function:Write-EventViewerWinRMConnectionStatus}
+            -BlankPassword:$BlankPassword
         try {
             Invoke-Command -Session $session -ScriptBlock $cmdBlock -ErrorAction Stop
             return $true
         } catch {
             return $false
         } finally {
-            Remove-PSSession $session
+            Remove-PSSession -Session $session
         }
     } else {
         try {
@@ -936,11 +952,12 @@ function Show-ScrollableDiagText {
                     # Fix Fast Startup action
                     Clear-TuiScreen
                     Write-Host "Disabling Fast Startup on $($diagData.ComputerName)..." -ForegroundColor Yellow
-                    $isRemoteComputer = -not [string]::IsNullOrEmpty($ComputerName) -and ($ComputerName -ne $env:COMPUTERNAME)
+                    $isRemoteComputer = -not [string]::IsNullOrEmpty($diagData.WinRMTarget)
                     $credToUse = if ($isRemoteComputer) { $Credential } else { $null }
-                    $compToUse = if ($isRemoteComputer) { $ComputerName } else { "" }
-                    
-                    $success = Disable-FastStartupAction -TargetComputer $compToUse -TargetCred $credToUse
+                    $compToUse = if ($isRemoteComputer) { $diagData.WinRMTarget } else { "" }
+                    $userToUse = if ($isRemoteComputer) { $diagData.WinRMUserName } else { $UserName }
+
+                    $success = Disable-FastStartupAction -TargetComputer $compToUse -TargetCred $credToUse -TargetUserName $userToUse
                     if ($success) {
                         Write-Host "`n✅ Successfully disabled Fast Startup!" -ForegroundColor Green
                         # Update local diagnostic representation
@@ -986,26 +1003,15 @@ function Run-RemoteDiagFlow {
     Clear-TuiScreen
     Write-Host "Connecting to $TargetName ($TargetComputer) via WinRM..." -ForegroundColor Gray
     
-    $credToUse = $null
-    
-    # Prompt for credential if none exists
-    if ($null -eq $Credential) {
-        Write-Host "`nEnter WinRM credentials for target PC." -ForegroundColor White
-        Write-Host "Username [default: $DefaultUser]: " -NoNewline -ForegroundColor Gray
-        $inputUser = Read-Host
-        $user = if ([string]::IsNullOrWhiteSpace($inputUser)) { $DefaultUser } else { $inputUser }
-        
-        Write-Host "Password (press Enter if blank): " -NoNewline -ForegroundColor Gray
-        $passSec = Read-Host -AsSecureString
-        $credToUse = New-Object System.Management.Automation.PSCredential($user, $passSec)
-    } else {
-        $credToUse = $Credential
-    }
-    
     try {
-        $data = Get-DiagnosticsData -TargetComputer $TargetComputer -TargetCred $credToUse
+        $data = Get-DiagnosticsData `
+            -TargetComputer $TargetComputer `
+            -TargetCred $Credential `
+            -TargetUserName $DefaultUser `
+            -TargetAliases @($TargetName) `
+            -TargetBlankPassword:$BlankPassword
         # Save connection to history
-        Add-ConnectionHistoryEntry -ComputerName $data.ComputerName -IPAddress $TargetComputer -UserName $credToUse.UserName
+        Add-ConnectionHistoryEntry -ComputerName $data.ComputerName -IPAddress $TargetComputer -UserName $data.WinRMUserName
         
         Show-ScrollableDiagText -Title "Remote PC Diagnostics: $($data.ComputerName) ($TargetComputer)" -diagData $data
     } catch {
@@ -1230,7 +1236,12 @@ function Show-DiagnosticsCli {
     Write-Host "Initializing EventViewer Diagnostics check for target: $targetName" -ForegroundColor Cyan
     
     try {
-        $data = Get-DiagnosticsData -TargetComputer $targetName -TargetCred $Credential
+        $data = Get-DiagnosticsData `
+            -TargetComputer $targetName `
+            -TargetCred $Credential `
+            -TargetUserName $UserName `
+            -TargetAliases @($ComputerName) `
+            -TargetBlankPassword:$BlankPassword
         $reportLines = Get-FormattedDiagLines -diagData $data
         
         foreach ($l in $reportLines) {
@@ -1240,7 +1251,7 @@ function Show-DiagnosticsCli {
             } elseif ($l -match '===') {
                 Write-Host $l -ForegroundColor Cyan
             } elseif ($l -match 'conclusion & recommendations') {
-                Write-Host $l -ForegroundColor Yellow -Bold
+                Write-Host $l -ForegroundColor Yellow
             } else {
                 Write-Host $l
             }

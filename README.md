@@ -36,7 +36,7 @@
 
 Το script αναλύει ταυτόχρονα το System Log, το `Microsoft-Windows-Kernel-WHEA/Operational` log, τη διαμόρφωση του Pagefile και την κατάσταση των δίσκων. Επίσης, αποκωδικοποιεί τα hex parameters του `volmgr` Event 161 (π.χ. `0xC00000A1` και `0xC00001AC`).
 
-Το `Ctrl+L` discovery χρησιμοποιεί το pinned shared `WinRMDiscovery`, ενώ το authenticated session opening χρησιμοποιεί το pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας.
+Το `Ctrl+L` discovery χρησιμοποιεί το pinned shared `WinRMDiscovery`, ενώ το authenticated session opening χρησιμοποιεί το pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας. Μετά την πρώτη επιτυχημένη σύνδεση, το credential αποθηκεύεται ως Windows DPAPI profile για τον ίδιο Windows user και installation, ώστε οι επόμενες συνδέσεις στο ίδιο hostname/IP να μη ζητούν ξανά password.
 
 ```
 [Local/Remote PC] ──► WinRM / Local Query ──► Gather Event Logs ──► Decode volmgr Hex
@@ -59,16 +59,21 @@
 
 ```powershell
 # Διάγνωση απομακρυσμένου PC
-.\Analyze-EventViewer.ps1 -ComputerName 192.168.1.47
+.\Analyze-EventViewer.ps1 -ComputerName 192.168.1.47 -UserName 'TARGET\user'
 
 # Διάγνωση με συγκεκριμένα credentials
 .\Analyze-EventViewer.ps1 -ComputerName 192.168.1.47 -Credential $cred
+
+# Ρητά γνωστό local account με κενό password (δεν αποθηκεύεται profile)
+.\Analyze-EventViewer.ps1 -ComputerName 192.168.1.47 -UserName 'cbx_t' -BlankPassword
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `-ComputerName` | `string` | `$null` | Το όνομα ή η IP του απομακρυσμένου υπολογιστή. |
 | `-Credential` | `PSCredential` | `$null` | Τα credentials σύνδεσης για το απομακρυσμένο PC. |
+| `-UserName` | `string` | `Administrator` | Προτεινόμενο username όταν δεν υπάρχει saved DPAPI profile. |
+| `-BlankPassword` | `switch` | `$false` | Χρήση ρητά γνωστού blank-password local account χωρίς αποθήκευση profile. |
 | `-Interactive` | `switch` | `$false` | Αναγκαστική εκκίνηση σε TUI Mode. |
 
 ---
@@ -139,6 +144,8 @@ eventviewer/
 ├── .assets/
 │   ├── WinRMConnection/                 # Pinned shared authenticated WinRM connector
 │   └── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
+├── internal/EventViewer/                 # EventViewer credential/session adapter
+├── tests/                                # Offline DPAPI credential integration tests
 ├── exports/                             # Φάκελος εξαγωγής αναφορών
 ├── Analyze-EventViewer.ps1              # Κεντρικό script διάγνωσης
 ├── Diagnose-LogonUIFreezes.ps1          # Read-only LogonUI/MSA/Windows Hello diagnostic
@@ -153,6 +160,13 @@ eventviewer/
 ---
 
 ## 🧠 Technical Notes
+
+<details>
+<summary><b>Πού αποθηκεύεται το WinRM password;</b></summary>
+
+Το EventViewer δεν γράφει plaintext password. Το shared connector χρησιμοποιεί Windows DPAPI-backed `Export-Clixml` κάτω από `%LOCALAPPDATA%\WinRMConnection\credentials` και κάνει save μόνο μετά από successful authentication. Το profile ανοίγει μόνο από τον ίδιο Windows user στην ίδια Windows installation· μετά από format χρειάζεται νέα εισαγωγή.
+
+</details>
 
 <details>
 <summary><b>Γιατί αποτυγχάνει η εγγραφή Dump (volmgr 161);</b></summary>

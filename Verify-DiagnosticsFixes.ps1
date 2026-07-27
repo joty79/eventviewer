@@ -183,7 +183,7 @@ foreach ($r in $results) {
     Write-Host ("{0,-32} : " -f $r.Setting) -NoNewline
     switch ($r.Color) {
         "Green"  { Write-Host $r.Status -ForegroundColor Green }
-        "Red"    { Write-Host $r.Status -ForegroundColor Red -Bold }
+        "Red"    { Write-Host $r.Status -ForegroundColor Red }
         "Yellow" { Write-Host $r.Status -ForegroundColor Yellow }
         default  { Write-Host $r.Status }
     }

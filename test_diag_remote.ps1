@@ -1,3 +1,10 @@
-$password = New-Object System.Security.SecureString
-$credential = New-Object System.Management.Automation.PSCredential("cbx_t", $password)
-& "d:\Users\joty79\scripts\eventviewer\Analyze-EventViewer.ps1" -ComputerName 192.168.1.47 -Credential $credential
+[CmdletBinding()]
+param(
+    [string]$ComputerName = '192.168.1.47',
+    [string]$UserName = 'cbx_t'
+)
+
+& (Join-Path $PSScriptRoot 'Analyze-EventViewer.ps1') `
+    -ComputerName $ComputerName `
+    -UserName $UserName `
+    -BlankPassword

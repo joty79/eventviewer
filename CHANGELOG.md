@@ -1,5 +1,23 @@
 # CHANGELOG - eventviewer
 
+## [1.6.0] - 2026-07-27
+
+### Added
+- Added prompt-once DPAPI credential profiles for EventViewer WinRM targets, keyed by both hostname and IP aliases.
+- Added explicit `-UserName` and `-BlankPassword` CLI parameters and an offline stale-credential replacement test.
+
+### Changed
+- Updated the pinned `WinRMConnection` runtime from `1.0.0` to `1.1.0`.
+- Routed the main diagnostics and tracked remote helper scripts through the shared EventViewer connection adapter instead of constructing credentials ad hoc.
+
+### Fixed
+- Removed unsupported `Write-Host -Bold` arguments from the CLI report and diagnostics verifier paths.
+
+### Security
+- New prompted credentials are saved only after successful authenticated session opening.
+- A saved profile is removed only after an `AuthenticationRejected` result; TCP, timeout, and transport failures preserve it.
+- Explicit `-Credential` and `-BlankPassword` values are never persisted automatically.
+
 ## [1.5.1] - 2026-07-27
 
 ### Fixed

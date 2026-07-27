@@ -192,6 +192,126 @@ function New-WinRMBlankPasswordCredential {
     return [System.Management.Automation.PSCredential]::new($UserName, $emptyPassword)
 }
 
+function Get-WinRMCredentialStateRoot {
+    param(
+        [AllowEmptyString()]
+        [string]$StateRoot = ''
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($StateRoot)) {
+        return [Environment]::ExpandEnvironmentVariables($StateRoot)
+    }
+
+    $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    if ([string]::IsNullOrWhiteSpace($localAppData)) {
+        $localAppData = Join-Path -Path $env:USERPROFILE -ChildPath 'AppData\Local'
+    }
+    return Join-Path -Path $localAppData -ChildPath 'WinRMConnection'
+}
+
+function Get-WinRMCredentialProfileKey {
+    param(
+        [Parameter(Mandatory)][string]$ComputerName,
+        [Parameter(Mandatory)][string]$Scope
+    )
+
+    $material = "$($Scope.Trim().ToLowerInvariant())|$($ComputerName.Trim().ToLowerInvariant())"
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($material)
+        return ([System.BitConverter]::ToString($sha256.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $sha256.Dispose()
+    }
+}
+
+function Get-WinRMCredentialProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$ComputerName,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$Scope = 'default',
+
+        [AllowEmptyString()]
+        [string]$StateRoot = ''
+    )
+
+    $credentialRoot = Join-Path -Path (Get-WinRMCredentialStateRoot -StateRoot $StateRoot) -ChildPath 'credentials'
+    foreach ($targetName in @($ComputerName | Select-Object -Unique)) {
+        if ([string]::IsNullOrWhiteSpace($targetName)) { continue }
+        $key = Get-WinRMCredentialProfileKey -ComputerName $targetName -Scope $Scope
+        $path = Join-Path -Path $credentialRoot -ChildPath "$key.xml"
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+
+        try {
+            $credential = Import-Clixml -LiteralPath $path -ErrorAction Stop
+            if ($credential -is [System.Management.Automation.PSCredential]) {
+                return $credential
+            }
+            Write-Verbose "Ignored invalid WinRM credential profile: $path"
+        } catch {
+            Write-Verbose "Could not decrypt WinRM credential profile '$path': $($_.Exception.Message)"
+        }
+    }
+    return $null
+}
+
+function Save-WinRMCredentialProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$ComputerName,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [System.Management.Automation.PSCredential]$Credential,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$Scope = 'default',
+
+        [AllowEmptyString()]
+        [string]$StateRoot = ''
+    )
+
+    $credentialRoot = Join-Path -Path (Get-WinRMCredentialStateRoot -StateRoot $StateRoot) -ChildPath 'credentials'
+    $null = New-Item -ItemType Directory -Path $credentialRoot -Force -ErrorAction Stop
+    foreach ($targetName in @($ComputerName | Select-Object -Unique)) {
+        if ([string]::IsNullOrWhiteSpace($targetName)) { continue }
+        $key = Get-WinRMCredentialProfileKey -ComputerName $targetName -Scope $Scope
+        $path = Join-Path -Path $credentialRoot -ChildPath "$key.xml"
+        $Credential | Export-Clixml -LiteralPath $path -Force -ErrorAction Stop
+    }
+}
+
+function Remove-WinRMCredentialProfile {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$ComputerName,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$Scope = 'default',
+
+        [AllowEmptyString()]
+        [string]$StateRoot = ''
+    )
+
+    $credentialRoot = Join-Path -Path (Get-WinRMCredentialStateRoot -StateRoot $StateRoot) -ChildPath 'credentials'
+    foreach ($targetName in @($ComputerName | Select-Object -Unique)) {
+        if ([string]::IsNullOrWhiteSpace($targetName)) { continue }
+        $key = Get-WinRMCredentialProfileKey -ComputerName $targetName -Scope $Scope
+        $path = Join-Path -Path $credentialRoot -ChildPath "$key.xml"
+        if ((Test-Path -LiteralPath $path -PathType Leaf) -and $PSCmdlet.ShouldProcess($targetName, 'Remove saved WinRM credential profile')) {
+            Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+        }
+    }
+}
+
 function Connect-WinRMSession {
     [CmdletBinding()]
     param(
@@ -536,8 +656,11 @@ function Invoke-WinRMCommand {
 
 Export-ModuleMember -Function @(
     'Connect-WinRMSession'
+    'Get-WinRMCredentialProfile'
     'Get-WinRMConnectionErrorCategory'
     'Invoke-WinRMCommand'
     'New-WinRMBlankPasswordCredential'
+    'Remove-WinRMCredentialProfile'
+    'Save-WinRMCredentialProfile'
     'Test-WinRMConnection'
 )

@@ -34,6 +34,15 @@
 * **Files affected:** `Analyze-EventViewer.ps1`, `.assets\WinRMDiscovery\*`, `.assets\WinRMConnection\*`, `README.md`, `CHANGELOG.md`, `PROJECT_RULES.md`.
 * **Validation:** Parser, canonical/consumer hash verification, shared PS7/Windows PowerShell 5.1 offline suites και elevated authenticated localhost smoke πέρασαν. Το προηγούμενο customer PC δεν ήταν διαθέσιμο για live retest.
 
+### 🔸 Prompt-Once DPAPI WinRM Credentials
+* **Ημερομηνία:** 27 Ιουλίου 2026
+* **Πρόβλημα:** Το EventViewer ζητούσε ξανά credentials σε κάθε remote diagnostic και tracked helper scripts κατασκεύαζαν ad hoc blank-password credentials.
+* **Root cause:** Το vendored `WinRMConnection` ήταν στην έκδοση `1.0.0` και το consumer flow δεν χρησιμοποιούσε τα shared DPAPI profile APIs.
+* **Κανόνας:** Δοκίμασε saved profile με hostname/IP aliases πριν από prompt. Κάνε save μόνο μετά από successful session open, αφαίρεσε profile μόνο για `AuthenticationRejected`, και μην αποθηκεύεις explicit `-Credential` ή `-BlankPassword` values.
+* **Files affected:** `Analyze-EventViewer.ps1`, `internal\EventViewer\Connect-EventViewerTarget.ps1`, `tests\Test-Connect-EventViewerTarget.ps1`, tracked remote helpers, `.assets\WinRMConnection\*`, `README.md`, `CHANGELOG.md`, `PROJECT_RULES.md`.
+* **Validation:** PowerShell parser, offline cached-profile rejection/replacement test, vendored hash verification και shared module suites. Το bounded live probe προς `192.168.1.47` σταμάτησε στο TCP preflight ως `TcpUnavailable`, πριν από authentication ή credential/profile change.
+* **Validation guardrail:** Πριν από live smoke, πάρε τα πραγματικά parameter names από `Get-Command`; το public API χρησιμοποιεί `-TcpTimeoutMs` και `-OpenTimeoutMs`. Στην εγκατεστημένη έκδοση του PSScriptAnalyzer, κάλεσε `Invoke-ScriptAnalyzer -Path` ανά file και όχι με array.
+
 ### 🔸 PowerShell Inspection Parser Guardrail
 * **Ημερομηνία:** 8 Ιουλίου 2026
 * **Πρόβλημα:** Σε ad hoc inspection command ξαναχρησιμοποιήθηκε `} | Format-List` αμέσως μετά από `foreach` statement και έδωσε `An empty pipe element is not allowed`.
