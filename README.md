@@ -35,6 +35,8 @@
 
 Το script αναλύει ταυτόχρονα το System Log, το `Microsoft-Windows-Kernel-WHEA/Operational` log, τη διαμόρφωση του Pagefile και την κατάσταση των δίσκων. Επίσης, αποκωδικοποιεί τα hex parameters του `volmgr` Event 161 (π.χ. `0xC00000A1` και `0xC00001AC`).
 
+Το `Ctrl+L` discovery χρησιμοποιεί το pinned shared `WinRMDiscovery`, ενώ το authenticated session opening χρησιμοποιεί το pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας.
+
 ```
 [Local/Remote PC] ──► WinRM / Local Query ──► Gather Event Logs ──► Decode volmgr Hex
                                                                      │
@@ -97,6 +99,9 @@ cd d:\Users\joty79\scripts\eventviewer
 
 ```
 eventviewer/
+├── .assets/
+│   ├── WinRMConnection/                 # Pinned shared authenticated WinRM connector
+│   └── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
 ├── exports/                             # Φάκελος εξαγωγής αναφορών
 ├── Analyze-EventViewer.ps1              # Κεντρικό script διάγνωσης
 ├── OptiPlex_7060_1.32.0.exe             # BIOS Update (Λήφθηκε & Επαληθεύτηκε)

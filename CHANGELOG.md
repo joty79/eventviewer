@@ -1,5 +1,14 @@
 # CHANGELOG - eventviewer
 
+## [1.5.0] - 2026-07-27
+
+### Changed
+- Routed `Ctrl+L` discovery through the pinned shared `WinRMDiscovery` module and authenticated session opening through `WinRMConnection`.
+- Added TCP preflight, three bounded connection attempts, visible retry status, transient-only retry, and categorized failure reporting instead of an unbounded silent wait.
+
+### Tests
+- Passed parser validation, vendored hash verification, the shared PS7/Windows PowerShell 5.1 offline suites, and an elevated authenticated localhost smoke.
+
 ## [1.4.0] - 2026-07-25
 ### Added
 - **PnP Hardware Device Error Detection:** Integrated `Win32_PnPEntity` queries for `ConfigManagerErrorCode != 0` to flag disabled/failing devices (e.g. AMD PSP 11.0 / Code 22 fTPM errors and Code 31 driver loading failures).

@@ -14,6 +14,28 @@ param(
     [switch]$Interactive
 )
 
+$winRMDiscoveryManifest = Join-Path -Path $PSScriptRoot -ChildPath '.assets\WinRMDiscovery\WinRMDiscovery.psd1'
+$winRMConnectionManifest = Join-Path -Path $PSScriptRoot -ChildPath '.assets\WinRMConnection\WinRMConnection.psd1'
+foreach ($moduleManifest in @($winRMDiscoveryManifest, $winRMConnectionManifest)) {
+    if (-not (Test-Path -LiteralPath $moduleManifest -PathType Leaf)) {
+        throw "Required shared WinRM module not found: $moduleManifest"
+    }
+    Import-Module -Name $moduleManifest -Force -ErrorAction Stop
+}
+
+function Write-EventViewerWinRMConnectionStatus {
+    param([Parameter(Mandatory)]$Status)
+
+    $statusColor = if ($Status.State -in @('AttemptFailed', 'Failed')) {
+        'Yellow'
+    } elseif ($Status.State -eq 'Connected') {
+        'Green'
+    } else {
+        'Cyan'
+    }
+    Write-Host "  WinRM: $($Status.Message)" -ForegroundColor $statusColor
+}
+
 $isRemote = -not [string]::IsNullOrEmpty($ComputerName) -and 
             ($ComputerName -ne "localhost") -and 
             ($ComputerName -ne "127.0.0.1") -and 
@@ -208,8 +230,20 @@ function Add-ToTrustedHosts {
     }
 }
 
-# Fast network discovery using ConnectAsync (port 5985)
+# Canonical shared discovery with the legacy ConnectAsync path retained as fallback
 function Get-NetDiscoveredHosts {
+    if ($null -ne (Get-Command -Name 'Find-WinRMComputer' -ErrorAction SilentlyContinue)) {
+        $sharedRows = @(Find-WinRMComputer | Where-Object WinRMHttpOpen)
+        return @(
+            foreach ($sharedRow in $sharedRows) {
+                [PSCustomObject]@{
+                    IP       = $sharedRow.IPAddress
+                    HostName = $sharedRow.ComputerName
+                }
+            }
+        )
+    }
+
     $discovered = [System.Collections.Generic.List[object]]::new()
     
     $interfaces = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -509,10 +543,10 @@ function Get-DiagnosticsData {
 
     if ($isTargetRemote) {
         Add-ToTrustedHosts -Target $TargetComputer
-        $sessionParams = @{ ComputerName = $TargetComputer }
-        if ($null -ne $TargetCred) { $sessionParams["Credential"] = $TargetCred }
-        
-        $session = New-PSSession @sessionParams -ErrorAction Stop
+        $session = Connect-WinRMSession `
+            -ComputerName $TargetComputer `
+            -Credential $TargetCred `
+            -OnStatus ${function:Write-EventViewerWinRMConnectionStatus}
         try {
             $remoteData = Invoke-Command -Session $session -ScriptBlock $diagBlock -ErrorAction Stop
             return $remoteData
@@ -771,10 +805,10 @@ function Disable-FastStartupAction {
     }
     
     if ($isTargetRemote) {
-        $sessionParams = @{ ComputerName = $TargetComputer }
-        if ($null -ne $TargetCred) { $sessionParams["Credential"] = $TargetCred }
-        
-        $session = New-PSSession @sessionParams -ErrorAction Stop
+        $session = Connect-WinRMSession `
+            -ComputerName $TargetComputer `
+            -Credential $TargetCred `
+            -OnStatus ${function:Write-EventViewerWinRMConnectionStatus}
         try {
             Invoke-Command -Session $session -ScriptBlock $cmdBlock -ErrorAction Stop
             return $true

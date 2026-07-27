@@ -7,6 +7,7 @@
 
 ## 🔵 2. Τεχνικές Προδιαγραφές & Κανόνες
 * **WinRM Remote Connection:** Σύνδεση με απομακρυσμένα συστήματα μέσω WinRM (παραμετροποίηση TrustedHosts αν απαιτείται). Υποστήριξη λογαριασμών με κενό κωδικό πρόσβασης (π.χ. `cbx_t` στο remote PC).
+* **Shared WinRM Runtime:** Το `Ctrl+L` discovery ανήκει στο pinned `.assets\WinRMDiscovery`, ενώ κάθε authenticated session ανοίγει μέσω pinned `.assets\WinRMConnection`. Το open TCP 5985 δεν ισοδυναμεί με επιτυχημένο authentication.
 * **TUI Mode:** Διαδραστική διεπαφή με χρήση του `PS_UI_Blueprint.psm1` και υποστήριξη της συντόμευσης `Ctrl+L` για LAN scan (θύρα 5985).
 * **Exports:** Εξαγωγή αναφορών σε Markdown και CSV στο φάκελο `exports/` πατώντας το πλήκτρο `E` στο TUI.
 * **Hiberboot (Fast Startup):** Υποστήριξη Quick Action στο TUI (`F` key) για απενεργοποίηση του Fast Startup locally (μέσω `gsudo`) ή remotely (μέσω της WinRM PSSession).
@@ -15,6 +16,14 @@
 ---
 
 ## 🔵 3. Ιστορικό Διαγνώσεων & Troubleshooting Memory
+### 🔸 Bounded WinRM Discovery and Authentication
+* **Ημερομηνία:** 27 Ιουλίου 2026
+* **Πρόβλημα:** PCs με ανοικτό WinRM μπορούσαν να αφήσουν το diagnostic workflow να περιμένει αρκετά λεπτά πριν από generic failure.
+* **Root cause:** Το discovery και το authenticated `New-PSSession` path ήταν ad hoc και χωρίς κοινό timeout/retry/status contract.
+* **Κανόνας:** Χρησιμοποίησε τα pinned `WinRMDiscovery` και `WinRMConnection`. Δείξε κάθε bounded attempt, retry μόνο transient session-opening failures, stop άμεσα σε credentials/TrustedHosts/name/configuration, και μη ξανατρέχεις αυτόματα remote diagnostic script block.
+* **Files affected:** `Analyze-EventViewer.ps1`, `.assets\WinRMDiscovery\*`, `.assets\WinRMConnection\*`, `README.md`, `CHANGELOG.md`, `PROJECT_RULES.md`.
+* **Validation:** Parser, canonical/consumer hash verification, shared PS7/Windows PowerShell 5.1 offline suites και elevated authenticated localhost smoke πέρασαν. Το προηγούμενο customer PC δεν ήταν διαθέσιμο για live retest.
+
 ### 🔸 PowerShell Inspection Parser Guardrail
 * **Ημερομηνία:** 8 Ιουλίου 2026
 * **Πρόβλημα:** Σε ad hoc inspection command ξαναχρησιμοποιήθηκε `} | Format-List` αμέσως μετά από `foreach` statement και έδωσε `An empty pipe element is not allowed`.
