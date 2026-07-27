@@ -11,11 +11,21 @@
 * **TUI Mode:** Διαδραστική διεπαφή με χρήση του `PS_UI_Blueprint.psm1` και υποστήριξη της συντόμευσης `Ctrl+L` για LAN scan (θύρα 5985).
 * **Exports:** Εξαγωγή αναφορών σε Markdown και CSV στο φάκελο `exports/` πατώντας το πλήκτρο `E` στο TUI.
 * **Hiberboot (Fast Startup):** Υποστήριξη Quick Action στο TUI (`F` key) για απενεργοποίηση του Fast Startup locally (μέσω `gsudo`) ή remotely (μέσω της WinRM PSSession).
+* **Hiberboot Verification Guardrail:** Το `HiberbootEnabled = 1` είναι registry preference και δεν αποδεικνύει μόνο του ενεργή hibernation/Fast Startup. Πριν από συμπέρασμα, κατέγραψε `powercfg /a`, ύπαρξη/μέγεθος `hiberfil.sys` και, όπου είναι δυνατό, before/after disk state.
+* **Remediation Baseline Guardrail:** Πριν από registry ή BIOS remediation, κατέγραψε τις προηγούμενες τιμές. Η επαναγραφή υπάρχουσας τιμής, όπως `TdrDelay = 10`, δεν αποτελεί αλλαγή ούτε μπορεί να πιστωθεί ως fix.
 * **BIOS Update Guardrail:** ΠΟΤΕ μην εκτελείτε αυτόματα αρχεία αναβάθμισης BIOS (π.χ. `OptiPlex_7060_1.32.0.exe`) μέσω scripts. Η αναβάθμιση BIOS πρέπει να γίνεται αποκλειστικά χειροκίνητα από τον χρήστη για λόγους ασφαλείας.
 
 ---
 
 ## 🔵 3. Ιστορικό Διαγνώσεων & Troubleshooting Memory
+### 🔸 LogonUI Diagnostic Runtime Guardrails
+* **Ημερομηνία:** 27 Ιουλίου 2026
+* **Πρόβλημα:** Το νέο `Diagnose-LogonUIFreezes.ps1` είχε parser-valid αλλά runtime-invalid `Write-Host -Bold` calls και καλούσε methods ενός `CimInstance` σαν legacy WMI object.
+* **Root cause:** Η αρχική υλοποίηση δεν είχε περάσει πραγματικό PowerShell 7 smoke test και μπέρδευε τα WMI method semantics με `Invoke-CimMethod`.
+* **Κανόνας:** Κάλεσε `Win32_Tpm` methods μόνο μέσω `Invoke-CimMethod`, κράτησε null-safe event message previews, έλεγξε το πλήθος Event properties πριν από indexing και διατήρησε `-NoClear` για repeatable capture.
+* **Files affected:** `Diagnose-LogonUIFreezes.ps1`, `README.md`, `CHANGELOG.md`, `PROJECT_RULES.md`.
+* **Validation:** PowerShell parser, PSScriptAnalyzer review, non-admin smoke και elevated smoke μέσω direct `gsudo.exe`.
+
 ### 🔸 Bounded WinRM Discovery and Authentication
 * **Ημερομηνία:** 27 Ιουλίου 2026
 * **Πρόβλημα:** PCs με ανοικτό WinRM μπορούσαν να αφήσουν το diagnostic workflow να περιμένει αρκετά λεπτά πριν από generic failure.
@@ -49,13 +59,19 @@
   - Απενεργοποίηση του Fast Startup (HiberbootEnabled = 0).
 
 ### 🔸 Διάγνωση στο PC NEOS / 192.168.1.6 (AMD Ryzen 7 9700X / MSI X870 Tomahawk)
-* **Ημερομηνία:** 25 Ιουλίου 2026
-* **Πρόβλημα:** Πάγωμα υπολογιστή (Hard Freeze) κατά την επιστροφή του χρήστη (idle status), χωρίς παραγωγή BSOD dump file.
-* **Βασικά Ευρήματα:**
-  1. **AMD PSP 11.0 Device Error (Code 22):** Η συσκευή AMD PSP (Platform Security Processor / fTPM) ήταν απενεργοποιημένη στο Device Manager / BIOS. Στους επεξεργαστές AMD Ryzen, η απουσία ή απενεργοποίηση του AMD PSP προκαλεί ολικό πάγωμα κατά τις μεταβάσεις χαμηλής ισχύος (Idle/Sleep C-States).
-  2. **Kernel-Power Event ID 41 (`BugcheckCode = 0`, `PowerButtonTimestamp > 0`):** Επιβεβαιώθηκε ότι ο χρήστης αναγκάστηκε να πατήσει παρατεταμένα το Power Button για hard restart.
-  3. **Fast Startup:** Ήταν ενεργοποιημένο (HiberbootEnabled = 1).
-* **Ενέργειες & Βελτιώσεις:**
-  - Ενεργοποίηση/Επανεγκατάσταση του AMD Chipset Driver (AMD PSP 11.0 Device) και απενεργοποίηση Fast Startup.
-  - Αναβάθμιση του `Analyze-EventViewer.ps1` με αυτόματο εντοπισμό PnP Device Errors (Code 22/31), dynamic dump path resolution (`D:\Temp\CrashDumps`), και XML parsing του Kernel-Power 41.
-
+* **Ημερομηνία:** 25-26 Ιουλίου 2026
+* **Πρόβλημα:** Κατά το display wake επανήλθε μόνο μία από δύο οθόνες, η taskbar ήταν frozen και δεν ανταποκρίνονταν `Ctrl+Alt+Del`, DisplayPort ή USB reconnect. Ο χρήστης προκάλεσε το Kernel-Power 41 με forced shutdown. Στη συνέχεια το Normal Mode έδινε black screen, ενώ το σκόπιμο Safe Mode λειτουργούσε.
+* **Root cause:** Δεν αποδείχθηκε. Το Safe Mode ➔ Normal Mode cycle είναι η πιθανότερη εξήγηση για την αποκατάσταση του black screen, με πιθανή αλλά μη αποδεδειγμένη συμβολή του `powercfg /h off`.
+* **Evidence guardrails:**
+  1. Το Event 41 επιβεβαιώνει το forced shutdown, όχι την αιτία του αρχικού freeze.
+  2. Τα ιστορικά `nvlddmkm` Event 153 ήταν ασυμπτωματικά και δεν συνέπεσαν χρονικά με το incident.
+  3. Το PSP Code 22 ήταν σκόπιμο disabled state και δεν αποδεικνύει C-state/idle root cause.
+  4. Το `HiberbootEnabled = 1` δεν απέδειξε ενεργό `hiberfil.sys`.
+  5. Τα `TdrDelay = 10` / `TdrDdiDelay = 10` προϋπήρχαν και απλώς ξαναγράφτηκαν.
+* **Preventive configuration μετά την αποκατάσταση:**
+  - PSP/fTPM απενεργοποιήθηκαν ξανά από τον χρήστη.
+  - `Power Supply Idle Control`: `Auto` ➔ `Typical Current Idle`.
+  - `Memory Context Restore = Enabled` και `Power Down Enable = Enabled`.
+  - `Curve Optimizer = Negative 30` διατηρήθηκε, με Curve Shaper `Positive 5` μόνο στα `Min Frequency - Low/Med Temperature` bands και `Low Frequency - Low/Med Temperature = Disabled/0`.
+* **Validation/monitoring:** Δεν έχει υπάρξει ακόμη νέο συγκρίσιμο incident. Αν επανέλθει, συλλογή live WinRM/display/input evidence πριν από forced shutdown.
+* **Files affected:** `doc/DIAGNOSIS_NEOS.md`, `NEOS/DIAGNOSIS_NEOS.md`, `PROJECT_RULES.md`, `CHANGELOG.md`.

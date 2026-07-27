@@ -18,6 +18,7 @@
 | # | Tool | Description |
 |:-:|------|-------------|
 | 🔍 | **[Analyze-EventViewer.ps1](#analyze-eventviewerps1)** | Κεντρικό script διάγνωσης και ανάλυσης σφαλμάτων. |
+| 🔐 | **[Diagnose-LogonUIFreezes.ps1](#diagnose-logonuifreezesps1)** | Read-only έλεγχος TPM, Windows Hello, authentication logs και unexpected shutdowns. |
 
 ---
 
@@ -72,6 +73,42 @@
 
 ---
 
+## 🔐 Diagnose-LogonUIFreezes.ps1
+
+> Read-only diagnostic για τυχαία LogonUI/MSA freezes και προβλήματα Windows Hello.
+
+### The Problem
+
+- Τα LogonUI freezes συχνά δεν αφήνουν crash dump.
+- TPM, Windows Hello, WAM/AAD και shutdown evidence βρίσκονται σε διαφορετικά logs και namespaces.
+- Non-admin execution μπορεί να δώσει ελλιπές αποτέλεσμα χωρίς να είναι σαφές ποιο evidence λείπει.
+
+### The Solution
+
+Το script συγκεντρώνει TPM/CIM state, NGC metadata, authentication-related events, Fast Startup preference και τα τελευταία Kernel-Power 41/EventLog 6008 records. Δεν αλλάζει Registry, TPM, NGC ή Windows Hello configuration.
+
+```text
+[Local PC] -> TPM/NGC checks -> Authentication logs -> Shutdown evidence -> Console report
+```
+
+### Usage
+
+```powershell
+# Πλήρης read-only διάγνωση
+.\Diagnose-LogonUIFreezes.ps1
+
+# Χωρίς Clear-Host, κατάλληλο για capture και smoke testing
+.\Diagnose-LogonUIFreezes.ps1 -NoClear
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `-NoClear` | `switch` | `$false` | Διατηρεί το υπάρχον terminal output. |
+
+Για πληρέστερη πρόσβαση στα System logs και στο protected NGC folder χρησιμοποίησε per-command elevation, π.χ. `gsudo.exe pwsh -NoProfile -File .\Diagnose-LogonUIFreezes.ps1 -NoClear`.
+
+---
+
 ## 📦 Installation
 
 ### Quick Setup
@@ -104,6 +141,9 @@ eventviewer/
 │   └── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
 ├── exports/                             # Φάκελος εξαγωγής αναφορών
 ├── Analyze-EventViewer.ps1              # Κεντρικό script διάγνωσης
+├── Diagnose-LogonUIFreezes.ps1          # Read-only LogonUI/MSA/Windows Hello diagnostic
+├── doc/                                 # Case reports και diagnostic handoff contracts
+├── NEOS/                                # NEOS case report, manuals και guarded remediation helper
 ├── OptiPlex_7060_1.32.0.exe             # BIOS Update (Λήφθηκε & Επαληθεύτηκε)
 ├── PROJECT_RULES.md                     # Κανόνες & Ιστορικό διαγνώσεων
 ├── CHANGELOG.md                         # Καταγραφή εκδόσεων

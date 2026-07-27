@@ -2,94 +2,157 @@
 
 ---
 
-## 🔵 1. Πληροφορίες Συστήματος (System Specifications)
+## 🔵 1. Πληροφορίες Συστήματος
+
 * **Όνομα Υπολογιστή:** `NEOS` (`192.168.1.6`)
-* **Μητρική Κάρτα:** Micro-Star International Co., Ltd. **MAG X870 TOMAHAWK WIFI** (MS-7E51, PCB Rev 1.0)
-* **Επεξεργαστής:** AMD Ryzen 7 9700X 8-Core Processor (Granite Ridge / Zen 5, AM5 Socket)
-* **Κάρτα Γραφικών:** NVIDIA GeForce RTX 4060 Ti
-* **BIOS Version:** `1.A65` (Release Date: 17/07/2025)
-* **Λειτουργικό Σύστημα:** Windows 10 Pro 64-bit (Build 19045)
-* **Manuals Αναφοράς:** 
-  - [MAGX870TOMAHAWKWIFI_English.pdf](file:///d:/Users/joty79/scripts/eventviewer/NEOS/MAGX870TOMAHAWKWIFI_English.pdf)
-  - [AMDAM5800BIOS_English x870 bios.pdf](file:///d:/Users/joty79/scripts/eventviewer/NEOS/AMDAM5800BIOS_English%20x870%20%20bios.pdf)
+* **Μητρική:** MSI MAG X870 TOMAHAWK WIFI (MS-7E51, PCB Rev 1.0)
+* **CPU:** AMD Ryzen 7 9700X (Granite Ridge / Zen 5)
+* **GPU:** NVIDIA GeForce RTX 4060 Ti
+* **BIOS:** `1.A65` (17/07/2025)
+* **OS:** Windows 10 Pro 64-bit (Build 19045)
+* **Manuals:**
+  * [MAGX870TOMAHAWKWIFI_English.pdf](file:///d:/Users/joty79/scripts/eventviewer/NEOS/MAGX870TOMAHAWKWIFI_English.pdf)
+  * [AMDAM5800BIOS_English x870 bios.pdf](file:///d:/Users/joty79/scripts/eventviewer/NEOS/AMDAM5800BIOS_English%20x870%20%20bios.pdf)
 
 ---
 
-## 🔵 2. Σύμπτωμα & Αρχική Κατάσταση (Symptom & Root Cause)
-1. **Αρχικό Πάγωμα (Hard Freeze σε Idle):** 
-   Ο υπολογιστής έμεινε αδρανής (idle) και πάγωσε πλήρως (οθόνη, πληκτρολόγιο, ποντίκι ανενεργά).
-2. **Μαύρη Οθόνη κατά την εκκίνηση σε Normal Mode:**
-   Μετά από αναγκαστικό hard restart (παρατεταμένο πάτημα Power Button), η εκκίνηση σε Normal Mode κατέληγε σε Μαύρη Οθόνη (Black Screen).
-3. **Safe Mode με Δίκτυο:**
-   Η εκκίνηση σε Safe Mode with Networking λειτουργούσε κανονικά.
+## 🔵 2. Ακριβές Timeline του Incident
+
+1. **Αρχικό hard freeze κατά το display wake**
+   * Ο υπολογιστής ήταν idle και οι δύο οθόνες είχαν σβήσει.
+   * Με κίνηση του ποντικιού επανήλθε μόνο η μία οθόνη.
+   * Η taskbar ήταν ορατή αλλά frozen.
+   * `Ctrl+Alt+Del`, DisplayPort reconnect και USB reconnect πληκτρολογίου/ποντικιού δεν άλλαξαν την κατάσταση.
+2. **Πρώτο αναγκαστικό shutdown**
+   * Ο χρήστης κράτησε πατημένο το Power Button επειδή το σύστημα δεν ανταποκρινόταν.
+   * Το μεταγενέστερο Kernel-Power Event ID 41 καταγράφει αυτή την αναγκαστική διακοπή. Δεν αποτελεί την αιτία του αρχικού freeze.
+3. **Normal Mode black screen**
+   * Μετά την εκκίνηση, το Normal Mode κατέληγε σε black screen.
+   * Ακολούθησε δεύτερο αναγκαστικό shutdown.
+4. **Σκόπιμο Safe Mode**
+   * Ο χρήστης ενεργοποίησε σκόπιμα το Safe Mode with Networking για διάγνωση.
+   * Το Safe Mode λειτουργούσε κανονικά. Δεν αφαιρέθηκε ο NVIDIA driver.
+5. **Επιστροφή σε Normal Mode**
+   * Μετά το Safe Mode cycle και τις ταυτόχρονες Windows-side ενέργειες, το Normal Mode boot αποκαταστάθηκε.
+   * Δεν απομονώθηκε ποια επιμέρους ενέργεια καθάρισε το black screen.
 
 ---
 
-## 🔵 2.1 Βήμα-προς-Βήμα Μεθοδολογία & Απόδειξη Συμπεράσματος (Step-by-Step Diagnostic Methodology)
+## 🔵 3. Παρατηρήσεις και Όρια των Αποδείξεων
 
-Η διάγνωση και το τελικό συμπέρασμα προέκυψαν βήμα-προς-βήμα από τα εξής ακριβή στοιχεία:
+### 🔸 Kernel-Power Event ID 41
 
-* **Βήμα 1 (Ανάλυση XML Kernel-Power ID 41):** 
-  Αντλήσαμε τα XML δεδομένα των συμβάντων 41 (`Get-WinEvent -FilterHashtable @{LogName='System'; Id=41}`). Διαπιστώσαμε ότι το `BugcheckCode = 0` (όχι BSOD) και το `PowerButtonTimestamp = 134294383680114449` ήταν θετικό. Αυτό **απέδειξε** ότι ο υπολογιστής έφαγε ολικό πάγωμα (Hard Lockup) και ο χρήστης αναγκάστηκε να πατήσει παρατεταμένα το κουμπί τροφοδοσίας.
-* **Βήμα 2 (Σάρωση Συσκευών PnP):** 
-  Εκτελέσαμε σάρωση συσκευών `Win32_PnPEntity` για `ConfigManagerErrorCode != 0`. Εντοπίστηκε η συσκευή **`AMD PSP 11.0 Device`** με κωδικό σφάλματος **`22` (CM_PROB_DISABLED / Disabled στο Device Manager)**. Η συσκευή ενεργοποιήθηκε επειδή αποτελεί βασικό platform/security component της AMD και η απενεργοποίησή της δεν αποτελεί φυσιολογική διαμόρφωση.
-* **Βήμα 3 (Έλεγχος Fast Startup & Hiberboot):** 
-  Ελέγξαμε το μητρώο `HKLM:\SYSTEM\...\Power\HiberbootEnabled`, το οποίο επέστρεψε **`1` (Enabled)**. Κατά το hard restart, τα Windows αποθήκευσαν φθαρμένη συνεδρία στο `hiberfil.sys`.
-* **Βήμα 4 (Διασταύρωση Safe Mode vs Normal Mode):** 
-  Στο Safe Mode τα Windows παρακάμπτουν το Fast Startup και φορτώνουν τον `BasicRender` driver της Microsoft. Στο Normal Mode, τα Windows προσπαθούσαν να επαναφέρουν τη φθαρμένη συνεδρία `hiberfil.sys` φορτώνοντας τον οδηγό της NVIDIA (`nvlddmkm.sys`), προκαλώντας κατάρρευση σε Μαύρη Οθόνη.
-* **Βήμα 5 (Ζωντανή Επαλήθευση μετά την Επισκευή):** 
-  Μετά τις ενέργειες (απενεργοποίηση Fast Startup, ενεργοποίηση AMD PSP, TdrDelay 10s και ρυθμίσεις BIOS), εκτελέσαμε ζωντανή επαλήθευση σε Normal Mode: `Boot Mode: Normal Boot (Clean)`, `AMD PSP Status: OK (ErrorCode: 0)`, `Zero PnP device errors`.
+Το XML είχε `BugcheckCode = 0` και μη μηδενικό `PowerButtonTimestamp = 134294383680114449`. Αυτό επιβεβαιώνει το παρατεταμένο πάτημα του Power Button που περιέγραψε ο χρήστης, όχι την τεχνική αιτία του freeze.
 
+### 🔸 Safe Mode έναντι Normal Mode
 
----
+Το επιτυχές Safe Mode δείχνει ότι το black screen συνδεόταν με driver, service ή persisted state που δεν φορτώνεται με τον ίδιο τρόπο στο Safe Mode. Ο NVIDIA display stack είναι εύλογος ύποπτος λόγω του display-wake συμπτώματος, αλλά δεν βρέθηκε incident-correlated `nvlddmkm` event, TDR dump ή LiveKernelReport που να το αποδεικνύει.
 
-## 🔵 3. Τεχνική Ανάλυση & Ευρήματα (Technical Analysis)
+### 🔸 Ιστορικά NVIDIA Event ID 153
 
-### 🔸 Εύρημα 1: AMD PSP 11.0 Device Disabled (Code 22)
-* **Εύρημα:** Η συσκευή `AMD PSP 11.0 Device` (Platform Security Processor / fTPM, `PCI\VEN_1022&DEV_1649...`) ήταν απενεργοποιημένη στο Device Manager (`ConfigManagerErrorCode = 22`).
-* **Τεχνική Αξιολόγηση:** Το `Code 22` υποδεικνύει αποκλειστικά ότι το PnP device node είχε απενεργοποιηθεί στα Windows. Η ενεργοποίηση της συσκευής ήταν ορθή ενέργεια καθώς αποτελεί βασικό platform component της AMD, αλλά από τα διαθέσιμα δεδομένα δεν αποδεικνύεται άμεσος μηχανισμός C6 handshake deadlock. Το εύρημα σχετίζεται πιθανώς με μη πλήρη/προβληματική εγκατάσταση των AMD chipset drivers.
+Υπήρχαν παλαιότερα, ασυμπτωματικά `nvlddmkm` Event ID 153. Το παρεχόμενο παράδειγμα ήταν στις `2026-04-29` και δεν συνοδευόταν από freeze, flicker, game/app crash ή άλλο αντιληπτό σύμπτωμα. Δεν συνδέεται χρονικά με το incident της 25ης Ιουλίου.
 
-### 🔸 Εύρημα 2: Φθαρμένη Κατάσταση Συνεδρίας (Fast Startup / Hiberboot)
-* **Εύρημα:** Το Fast Startup (`HiberbootEnabled = 1`) ήταν ενεργοποιημένο.
-* **Μηχανισμός:** Κατά το hard restart (Power Button timestamp `134294383680114449`), τα Windows αποθήκευσαν φθαρμένη κατάσταση στο `hiberfil.sys`. Κάθε προσπάθεια εκκίνησης σε Normal Mode προσπαθούσε να επαναφέρει τη φθαρμένη συνεδρία, προκαλώντας κατάρρευση του οδηγού κάρτας γραφικών NVIDIA (`nvlddmkm.sys`) / DWM σε Μαύρη Οθόνη.
+### 🔸 AMD PSP Code 22
 
+Το `AMD PSP 11.0 Device` είχε `ConfigManagerErrorCode = 22`, επειδή ο χρήστης το είχε απενεργοποιήσει σκόπιμα μαζί με το fTPM. Το Code 22 αποδεικνύει μόνο disabled PnP state. Δεν αποδεικνύεται ότι το PSP/fTPM προκάλεσε το idle/display-wake freeze.
 
----
+### 🔸 Fast Startup / Hibernation
 
-## 🔵 4. Ενέργειες Επισκευής που Εκτελέστηκαν (Executed Repairs)
+Καταγράφηκε μόνο `HiberbootEnabled = 1`. Το registry preference από μόνο του δεν αποδεικνύει ότι:
 
-1. ✅ **Ενεργοποίηση της συσκευής AMD PSP 11.0:**
-   * Εκτελέστηκε απομακρυσμένη ενεργοποίηση μέσω PowerShell (`Enable-PnpDevice`).
-   * **Επαλήθευση:** Η συσκευή άλλαξε σε `Status: OK` (`ConfigManagerErrorCode = 0`).
-2. ✅ **Πλήρης Απενεργοποίηση Fast Startup:**
-   * Εκτελέστηκε `powercfg /h off` και `HiberbootEnabled = 0` στο μητρώο, διαγράφοντας τη φθαρμένη κατάσταση αδρανοποίησης.
-3. ✅ **Ρύθμιση Graphics Driver TDR Delay (10s):**
-   * Προστέθηκαν οι τιμές `TdrDelay = 10` & `TdrDdiDelay = 10` στο `HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers` για αποτροπή TDR timeouts της RTX 4060 Ti κατά την εκκίνηση.
-4. ✅ **Επαναφορά BCD σε Normal Boot:**
-   * Αφαιρέθηκε η παράμετρος safeboot από το BCD (`bcdedit /deletevalue {current} safeboot`).
+* υπήρχε ενεργό και χρησιμοποιήσιμο `hiberfil.sys`,
+* το `powercfg /a` επέτρεπε hibernation,
+* το προηγούμενο boot χρησιμοποίησε Fast Startup.
+
+Δεν καταγράφηκε before-state για το `hiberfil.sys` ή τον διαθέσιμο χώρο δίσκου. Επομένως η προηγούμενη λειτουργική κατάσταση της hibernation παραμένει άγνωστη.
 
 ---
 
-## 🔵 5. Επαληθευμένες Ρυθμίσεις BIOS (Επίσημο Εγχειρίδιο MSI AM5 X870 BIOS)
+## 🔵 4. Windows-side Ενέργειες και Αποκατάσταση
 
-Με βάση το επίσημο manual της MSI (`AMDAM5800BIOS_English x870 bios.pdf`), παρατίθενται οι ακριβείς διαδρομές BIOS για τη διατήρηση 100% σταθερότητας:
+1. **Safe Mode diagnostic cycle**
+   * Το Safe Mode ενεργοποιήθηκε σκόπιμα και λειτούργησε.
+   * Δεν αφαιρέθηκε ή επανεγκαταστάθηκε ο NVIDIA driver.
+2. **Προσωρινή ενεργοποίηση AMD PSP 11.0**
+   * Εκτελέστηκε `Enable-PnpDevice` και επιβεβαιώθηκε `ConfigManagerErrorCode = 0`.
+   * Μετά την αποκατάσταση, ο χρήστης επέλεξε να απενεργοποιήσει ξανά PSP/fTPM.
+   * Η προσωρινή ενεργοποίηση δεν θεωρείται αποδεδειγμένο fix.
+3. **Απενεργοποίηση hibernation/Fast Startup**
+   * Εκτελέστηκε `powercfg /h off` και γράφτηκε `HiberbootEnabled = 0`.
+   * Δεν υπήρχε καταγεγραμμένο before-state που να αποδεικνύει ενεργό `hiberfil.sys`.
+4. **Επαναγραφή προϋπαρχόντων TDR values**
+   * Το remediation script έγραψε `TdrDelay = 10` και `TdrDdiDelay = 10`.
+   * Οι ίδιες decimal τιμές υπήρχαν ήδη από παλαιότερο `.reg` tweak (`dword:0000000a`).
+   * Δεν υπήρξε πραγματική αλλαγή στο TDR configuration και δεν μπορεί να πιστωθεί σε αυτό η αποκατάσταση.
+5. **Επαναφορά BCD σε Normal Boot**
+   * Αφαιρέθηκε η σκόπιμα τεθείσα παράμετρος safeboot (`bcdedit /deletevalue {current} safeboot`).
 
-### 1. **fTPM 2.0 / AMD PSP Switch**
-* **EZ Mode (Page 6 / 25):** `EZ On/Off` ➔ `fTPM 2.0` (Switch **ON**).
-* **Advanced Mode (Page 62):** `Security` ➔ `Trusted Computing` ➔ `Security Device Support` [Enabled] & `AMD fTPM switch` [AMD CPU fTPM].
+### 🔸 Πιθανότερη εξήγηση του Normal Mode black screen
 
-### 2. **Power Supply Idle Control (Αποτροπή Idle Freeze)**
-* **Advanced Mode (Page 44):** `Overclocking` ➔ `Advanced CPU Configuration` ➔ `AMD CBS` ➔ `Power Supply Idle Control`.
-* **Ρύθμιση:** **Typical Current Idle** (αντί για Low Current Idle).
+Το Safe Mode ➔ Normal Mode cycle είναι η ισχυρότερη πρακτική εξήγηση: φόρτωσε minimal driver set/Microsoft display path και επέτρεψε καθαρή επόμενη αρχικοποίηση στο Normal Mode. Το `powercfg /h off` μπορεί επίσης να καθάρισε persisted hibernation/Fast Startup state, εάν τέτοιο state υπήρχε πραγματικά.
 
-### 3. **Global C-State Control**
-* **Advanced Mode (Page 44):** `Overclocking` ➔ `Advanced CPU Configuration` ➔ `AMD CBS` ➔ `Global C-state Control` [Auto / Enabled].
-
-### 4. **Memory Context Restore & Power Down (DDR5 EXPO)**
-* **Advanced Mode (Page 49 & 53):** `Overclocking` ➔ `Memory Context Restore` [Enabled] & `Overclocking` ➔ `Advanced DRAM Configuration` ➔ `Misc item` ➔ `Power Down Enable` [Enabled]. *(Πρέπει να είναι και τα δύο Enabled μαζί).*
+Επειδή οι ενέργειες έγιναν μαζί, δεν υπάρχει αιτιώδης απομόνωση. Το report δεν αποδίδει το black screen ως αποδεδειγμένο PSP, hibernation ή NVIDIA failure.
 
 ---
 
-## 🔵 6. Ιστορικό Ενημερώσεων Διαγνωστικών Εργαλείων
-* **[Analyze-EventViewer.ps1](file:///d:/Users/joty79/scripts/eventviewer/Analyze-EventViewer.ps1):** Ενημερώθηκε με αυτόματο εντοπισμό PnP Device Errors (Code 22/31), dynamic dump path resolution (`D:\Temp\CrashDumps`), και XML parsing του Kernel-Power 41.
-* **[PROJECT_RULES.md](file:///d:/Users/joty79/scripts/eventviewer/PROJECT_RULES.md):** Ενημερώθηκε με το στιγμιότυπο διάγνωσης του `NEOS`.
+## 🔵 5. Προληπτικές BIOS/CPU Αλλαγές μετά την Αποκατάσταση
+
+Οι ακόλουθες αλλαγές έγιναν **μετά** την επιτυχή επιστροφή σε Normal Mode. Δεν αποτελούν το fix του black screen. Είναι προληπτικές δοκιμές για μείωση της πιθανότητας νέου idle freeze.
+
+### 1. fTPM 2.0 / AMD PSP
+
+* Ενεργοποιήθηκε προσωρινά μετά το incident και αργότερα απενεργοποιήθηκε ξανά από τον χρήστη.
+* **Τρέχουσα αναφερόμενη κατάσταση:** Disabled.
+* Δεν υπάρχει τεκμηριωμένη αιτιώδης σύνδεση με το συγκεκριμένο freeze.
+
+### 2. Power Supply Idle Control
+
+* **Διαδρομή (BIOS manual page 44):** `Overclocking` ➔ `Advanced CPU Configuration` ➔ `AMD CBS` ➔ `Power Supply Idle Control`.
+* **Αλλαγή:** `Auto` ➔ `Typical Current Idle`.
+* **Σκοπός:** Αποφυγή υπερβολικά χαμηλού platform/PSU current κατά το idle. Μπορεί να βοηθήσει προληπτικά εάν το freeze προήλθε από low-current transition.
+
+### 3. Global C-State Control
+
+* **Διαδρομή (BIOS manual page 44):** `Overclocking` ➔ `Advanced CPU Configuration` ➔ `AMD CBS` ➔ `Global C-state Control`.
+* **Κατάσταση:** Δεν ελέγχθηκε και δεν άλλαξε.
+
+### 4. Memory Context Restore & Power Down Enable
+
+* **Διαδρομές (BIOS manual pages 49 και 53):**
+  * `Overclocking` ➔ `Memory Context Restore` [Enabled].
+  * `Overclocking` ➔ `Advanced DRAM Configuration` ➔ `Misc item` ➔ `Power Down Enable` [Enabled].
+* **Αλλαγή:** Το `Memory Context Restore` παρέμεινε Enabled και το `Power Down Enable` τέθηκε Enabled.
+* **Σκοπός:** Συνεπής DDR5 context/low-power configuration. Μπορεί να βοηθήσει προληπτικά εάν το freeze σχετιζόταν με marginal DDR5 state.
+
+### 5. Curve Optimizer / Curve Shaper
+
+* **Υφιστάμενο tuning:** `Curve Optimizer = Negative 30`, αναφερόμενο ως σταθερό για περίπου 10 μήνες σε games και κανονική χρήση.
+* **Νέα προληπτική αντιστάθμιση στα minimum-frequency corners:**
+
+| Curve Shaper band | Τρέχουσα τιμή |
+|---|---:|
+| Min Frequency - Low Temperature | Positive 5 |
+| Min Frequency - Med Temperature | Positive 5 |
+| Low Frequency - Low Temperature | Disabled / 0 |
+| Low Frequency - Med Temperature | Disabled / 0 |
+
+* **Σκοπός:** Επιστροφή μικρού positive voltage offset μόνο στα minimum-frequency/low-to-medium-temperature σημεία, όπου ένα γενικό `CO -30` μπορεί να είναι οριακό κατά το idle, χωρίς να αναιρείται το tuning στα υψηλότερα frequency bands.
+
+---
+
+## 🔵 6. Τελικό Συμπέρασμα και Monitoring
+
+* Το Normal Mode black screen αποκαταστάθηκε πιθανότερα από το Safe Mode ➔ Normal Mode cycle, με πιθανή αλλά μη αποδεδειγμένη συμβολή του `powercfg /h off`.
+* Τα TDR values δεν άλλαξαν και οι BIOS/Curve Shaper αλλαγές έγιναν μετά την αποκατάσταση.
+* Η root cause του αρχικού idle/display-wake hard freeze παραμένει μη αποδεδειγμένη.
+* Πιθανές αιτίες παραμένουν NVIDIA/display-resume hang, low-current platform transition, marginal DDR5 state ή low-voltage CPU idle corner από το `CO -30`.
+* Οι `Typical Current Idle`, `Power Down Enable = Enabled` και οι δύο `Curve Shaper Positive 5` αλλαγές έχουν εύλογη πιθανότητα να μειώσουν την επανάληψη εάν η αιτία ήταν low-current, DDR5-state ή low-voltage idle corner.
+* Εάν το freeze επανέλθει, προτεραιότητα έχει η συλλογή live evidence από το laptop μέσω WinRM πριν από forced shutdown: ping/WinRM responsiveness, `Win+Ctrl+Shift+B`, Caps/Num Lock response και incident-correlated System/Application events.
+* Η τρέχουσα απόφαση είναι monitoring χωρίς πρόσθετες αλλαγές και επανεκτίμηση μόνο εάν υπάρξει νέο πραγματικό σύμπτωμα.
+
+---
+
+## 🔵 7. Ιστορικό Ενημερώσεων Διαγνωστικών Εργαλείων
+
+* **[Analyze-EventViewer.ps1](file:///d:/Users/joty79/scripts/eventviewer/Analyze-EventViewer.ps1):** Ενημερώθηκε με αυτόματο εντοπισμό PnP Device Errors (Code 22/31), dynamic dump path resolution (`D:\Temp\CrashDumps`) και XML parsing του Kernel-Power 41.
+* **[PROJECT_RULES.md](file:///d:/Users/joty79/scripts/eventviewer/PROJECT_RULES.md):** Ενημερώθηκε με το διορθωμένο στιγμιότυπο διάγνωσης του `NEOS`.

@@ -1,5 +1,15 @@
 # CHANGELOG - eventviewer
 
+## [1.5.1] - 2026-07-27
+
+### Fixed
+- Removed invalid `Write-Host -Bold` arguments from `Diagnose-LogonUIFreezes.ps1`.
+- Invoked `Win32_Tpm` CIM methods through `Invoke-CimMethod` and made event collection/message previews scalar- and null-safe.
+- Added `-NoClear` for repeatable smoke captures and guarded Kernel-Power property indexing.
+
+### Documentation
+- Documented the LogonUI/MSA diagnostic workflow and its read-only/elevation boundaries in `README.md`.
+
 ## [1.5.0] - 2026-07-27
 
 ### Changed
@@ -15,6 +25,12 @@
 - **Dynamic Memory Dump Path Resolution:** Updated `Analyze-EventViewer.ps1` to resolve `$crashControl.DumpFile` and `$crashControl.MinidumpDir` from CrashControl registry keys instead of hardcoding `C:\Windows\Minidump`.
 - **Event ID 41 XML Parameter Decoding:** Added XML payload parsing to distinguish BSOD BugCheck codes from physical Power Button forced hard-reboots (`BugcheckCode = 0`, `PowerButtonTimestamp > 0`).
 - **SafeBoot Environment Reporting:** Added `SafeBootStatus` inspection to flag whether a target PC is booted in Safe Mode (Minimal or With Networking) vs Normal Boot.
+
+### Changed
+- **NEOS Incident Report Correction:** Rewrote both `doc/DIAGNOSIS_NEOS.md` and `NEOS/DIAGNOSIS_NEOS.md` with the exact dual-monitor display-wake freeze timeline and separated the user-induced Event 41 from the original failure.
+- **Recovery vs Prevention:** Documented that the Normal Mode black screen was most likely cleared by the Safe Mode cycle, with hibernation reset remaining possible but unproven. BIOS and Curve Shaper changes occurred afterward as prevention.
+- **Evidence Corrections:** Recorded that PSP Code 22 was intentional, historical `nvlddmkm` Event 153 entries were symptomless and unrelated in time, hibernation was not proven by `HiberbootEnabled` alone, and the TDR values already existed at decimal `10`.
+- **Preventive BIOS/CPU Configuration:** Recorded `Typical Current Idle`, `Memory Context Restore + Power Down Enable`, retained `CO -30`, and Curve Shaper `Positive 5` at the minimum-frequency low/medium-temperature bands.
 
 ## [1.3.0] - 2026-07-09
 

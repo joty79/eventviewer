@@ -1,0 +1,17 @@
+* text=auto
+
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.txt text eol=lf
+
+# Captured command output may contain mixed encodings/line endings; preserve it byte-for-byte.
+doc/remote_diag_output*.txt -text
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.reg text eol=crlf
+*.vbs text eol=crlf
