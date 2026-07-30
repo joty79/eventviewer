@@ -22,6 +22,7 @@
 - Reclassified PnP Code 22 as context-dependent disabled state, bounded `volmgr 161` to dump-failure evidence, and removed the hardcoded OptiPlex BIOS-version verdict from generic diagnostics.
 - Made the focused LogonUI diagnostic distinguish failed/protected TPM, NGC and Event Log queries from clean results, and removed causal Fast Startup/Event 41 wording.
 - Made the TUI Fast Startup action capture before-state, require explicit confirmation, verify Registry readback, preserve blank-password authentication and report the actual elevation/session path.
+- Treated an absent normal-boot `SafeBoot\Option` key as expected state under `StrictMode`, and made headless diagnostic failures return a nonzero process result instead of silently exiting successfully.
 
 ### Tests
 - Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
@@ -31,6 +32,7 @@
 - Added a focused read-only/evidence contract test plus real non-admin and per-command elevated LogonUI diagnostic smoke coverage.
 - Added an offline TUI contract test for credential selection, verified Fast Startup mutation semantics, Ctrl+L handling and height-bounded menu/report rendering.
 - Completed a real 80-column TUI smoke on `PALIOS`: history resolution, interactive blank-password selection, attempt-1 authentication, report rendering and Fast Startup confirmation/cancel all passed without Registry mutation.
+- Added a local/headless guard for null-safe SafeBoot evidence and nonzero diagnostic failure propagation.
 - Completed a read-only live smoke on `PALIOS` (`192.168.1.7`) with its local blank-password account: discovery, exact-target elevated `TrustedHosts` readback, first-attempt authentication, full CLI diagnostics/export, canonical history resolution and bounded PTY open/exit all passed.
 
 ## [1.6.0] - 2026-07-27

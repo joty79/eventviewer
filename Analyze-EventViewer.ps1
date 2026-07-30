@@ -137,8 +137,30 @@ function Get-DiagnosticsData {
         $ram = Get-CimInstance Win32_PhysicalMemory | Select-Object DeviceLocator, Capacity, Speed, Manufacturer, PartNumber
         
         # SafeBoot & Fast Startup Configuration
-        $safeBootOption = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Option' -ErrorAction SilentlyContinue).Option
-        $safeBootStatus = if ($safeBootOption -eq 1) { "Safe Mode (Minimal)" } elseif ($safeBootOption -eq 2) { "Safe Mode (With Networking)" } else { "Normal Boot" }
+        $safeBootOption = $null
+        $safeBootStatus = 'Unknown (SafeBoot query unavailable)'
+        try {
+            $safeBootState = Get-ItemProperty `
+                -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Option' `
+                -ErrorAction Stop
+            $safeBootOptionProperty = $safeBootState.PSObject.Properties['Option']
+            if ($null -eq $safeBootOptionProperty) {
+                $safeBootStatus = 'Unknown (SafeBoot Option value missing)'
+            } else {
+                $safeBootOption = $safeBootOptionProperty.Value
+                $safeBootStatus = if ($safeBootOption -eq 1) {
+                    'Safe Mode (Minimal)'
+                } elseif ($safeBootOption -eq 2) {
+                    'Safe Mode (With Networking)'
+                } else {
+                    "Unknown (SafeBoot Option=$safeBootOption)"
+                }
+            }
+        } catch {
+            if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound) {
+                $safeBootStatus = 'Normal Boot (SafeBoot Option key absent)'
+            }
+        }
 
         $fastStartup = $null
         $hiberboot = $null
@@ -1522,7 +1544,7 @@ function Show-DiagnosticsCli {
         Write-Host "   CSV:      $($exports.CsvCrashPath)" -ForegroundColor White
         
     } catch {
-        Write-Error "❌ Error retrieving diagnostics data: $_"
+        throw "❌ Error retrieving diagnostics data: $($_.Exception.Message)"
     }
 }
 

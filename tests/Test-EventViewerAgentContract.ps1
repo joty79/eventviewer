@@ -67,6 +67,20 @@ foreach ($requiredParameter in @('ComputerName', 'Credential', 'UserName', 'Blan
     }
 }
 
+$mainSource = Get-Content -LiteralPath $mainPath -Raw
+if ($mainSource -match '\)\.Option\b') {
+    throw 'SafeBoot Option is still accessed through an unsafe property dereference.'
+}
+foreach ($requiredLocalDiagnosticGuard in @(
+        "\.PSObject\.Properties\['Option'\]",
+        "Normal Boot \(SafeBoot Option key absent\)",
+        'throw "❌ Error retrieving diagnostics data:'
+    )) {
+    if ($mainSource -notmatch $requiredLocalDiagnosticGuard) {
+        throw "Local/headless diagnostic guard is missing: $requiredLocalDiagnosticGuard"
+    }
+}
+
 $activePowerShellFiles = @(
     Get-ChildItem -LiteralPath $repoRoot -Filter '*.ps1' -File |
         Where-Object { $_.Name -notlike 'scratch*' }
