@@ -56,6 +56,17 @@
 .\Analyze-EventViewer.ps1
 ```
 
+Μετά την επιλογή remote target, το TUI ζητά το Windows account και προσφέρει
+δύο ξεκάθαρα authentication modes: saved DPAPI/secure credential prompt ή
+ρητά blank password. Δεν χρειάζεται να θυμάσαι το `-BlankPassword` switch για
+interactive χρήση και δεν υπάρχει target-specific default account.
+
+Στην diagnostic detail screen, το `F` είναι Registry mutation και εμφανίζει
+ξεχωριστή επιβεβαίωση. Η ενέργεια καταγράφει το υπάρχον
+`HiberbootEnabled`, γράφει `0` μόνο όταν χρειάζεται και θεωρείται επιτυχής μόνο
+με verified readback. Δεν κάνει reboot/logoff και δεν παρουσιάζει την αλλαγή ως
+απόδειξη ότι το Fast Startup προκάλεσε ή διόρθωσε το incident.
+
 **Από το Terminal (CLI Mode):**
 *Εκτελέστε το script ορίζοντας ComputerName για CLI output και αυτόματη εξαγωγή.*
 

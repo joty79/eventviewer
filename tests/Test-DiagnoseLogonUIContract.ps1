@@ -5,6 +5,7 @@ $scriptPath = Join-Path $repoRoot 'Diagnose-LogonUIFreezes.ps1'
 $source = Get-Content -LiteralPath $scriptPath -Raw
 $runbookPath = Join-Path $repoRoot 'docs\AGENT_RUNBOOK.md'
 $runbookSource = Get-Content -LiteralPath $runbookPath -Raw
+$normalizedRunbookSource = $runbookSource -replace '\s+', ' '
 
 $tokens = $null
 $parseErrors = $null
@@ -53,14 +54,14 @@ foreach ($contractItem in $forbiddenPatterns.GetEnumerator()) {
 
 $runbookPatterns = [ordered]@{
     'local-only scope' = 'separate local-only focused collector'
-    'canonical remote CLI remains Analyze-EventViewer' = 'does not replace the canonical `Analyze-EventViewer\.ps1` flow'
+    'canonical remote CLI remains Analyze-EventViewer' = 'not a remote wrapper, a complete PC diagnostic, or a replacement for the canonical `Analyze-EventViewer\.ps1` flow'
     'strict automation invocation' = '-FailOnUnavailable'
     'partial exit meaning' = 'Exit code `2` means the diagnostic completed'
     'admin evidence boundary' = 'Non-admin and elevated runs are different evidence'
 }
 
 foreach ($contractItem in $runbookPatterns.GetEnumerator()) {
-    if ($runbookSource -notmatch $contractItem.Value) {
+    if ($normalizedRunbookSource -notmatch $contractItem.Value) {
         throw "Missing LogonUI agent-runbook contract: $($contractItem.Key)."
     }
 }

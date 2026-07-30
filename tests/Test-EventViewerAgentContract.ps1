@@ -85,6 +85,18 @@ if ($agentsText -notmatch 'docs/AGENT_RUNBOOK\.md') {
     throw 'AGENTS.md does not route agent operations to docs/AGENT_RUNBOOK.md.'
 }
 
+$runbookText = Get-Content -LiteralPath $runbookPath -Raw
+$normalizedRunbookText = $runbookText -replace '\s+', ' '
+foreach ($requiredAgentBoundary in @(
+        'repeatable evidence baselines, not limits on the investigation',
+        'bounded incident-specific read-only queries',
+        'promote them into a maintained script only when they are safe, reusable and backed by focused tests'
+    )) {
+    if ($normalizedRunbookText -notmatch [regex]::Escape($requiredAgentBoundary)) {
+        throw "Agent investigation-freedom boundary is missing: $requiredAgentBoundary"
+    }
+}
+
 $gitIgnoreText = Get-Content -LiteralPath (Join-Path $repoRoot '.gitignore') -Raw
 if ($gitIgnoreText -notmatch '(?m)^scratch\*\s*$') {
     throw 'Ignored scratch assets are not separated from the project contract.'

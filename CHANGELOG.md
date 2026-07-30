@@ -10,6 +10,8 @@
 - Split the project rules into a compact `AGENTS.md` router, a current `PROJECT_RULES.md` contract and a lossless searchable historical archive/index.
 - Made the direct `Analyze-EventViewer.ps1` CLI the single Codex/Gemini automation path and added a canonical agent runbook.
 - Retired stale hardcoded test/remediation helpers and the tool-specific Antigravity relay contract into a lossless, hash-indexed, non-executable archive.
+- Replaced target-specific TUI account defaults with an explicit account and authentication-mode choice, including first-class blank-password selection.
+- Defined the maintained scripts as repeatable diagnostic baselines while preserving agent freedom for explicit, bounded incident-specific read-only investigation.
 
 ### Security
 - Explicit UI/CLI target selection now authorizes only a verified exact hostname/IP entry; wildcard and comma-list targets are rejected, and legacy `*` is narrowed to the selected target.
@@ -19,6 +21,7 @@
 - Preserved unavailable Fast Startup, disk, PnP and event-query evidence as `unknown/unavailable` instead of silently converting it to disabled, empty or healthy state.
 - Reclassified PnP Code 22 as context-dependent disabled state, bounded `volmgr 161` to dump-failure evidence, and removed the hardcoded OptiPlex BIOS-version verdict from generic diagnostics.
 - Made the focused LogonUI diagnostic distinguish failed/protected TPM, NGC and Event Log queries from clean results, and removed causal Fast Startup/Event 41 wording.
+- Made the TUI Fast Startup action capture before-state, require explicit confirmation, verify Registry readback, preserve blank-password authentication and report the actual elevation/session path.
 
 ### Tests
 - Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
@@ -26,6 +29,8 @@
 - Added an agent-contract guard for the single CLI entry point, retired paths, archive hashes and ad-hoc `New-PSSession` regressions.
 - Expanded PowerShell 7/5.1 formatting tests for unknown query state, intentional Code 22, decoded versus undecoded `volmgr 161`, and removal of unsupported causal conclusions.
 - Added a focused read-only/evidence contract test plus real non-admin and per-command elevated LogonUI diagnostic smoke coverage.
+- Added an offline TUI contract test for credential selection, verified Fast Startup mutation semantics, Ctrl+L handling and height-bounded menu/report rendering.
+- Completed a real 80-column TUI smoke on `PALIOS`: history resolution, interactive blank-password selection, attempt-1 authentication, report rendering and Fast Startup confirmation/cancel all passed without Registry mutation.
 - Completed a read-only live smoke on `PALIOS` (`192.168.1.7`) with its local blank-password account: discovery, exact-target elevated `TrustedHosts` readback, first-attempt authentication, full CLI diagnostics/export, canonical history resolution and bounded PTY open/exit all passed.
 
 ## [1.6.0] - 2026-07-27

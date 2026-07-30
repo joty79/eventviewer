@@ -10,7 +10,9 @@ dump/pagefile state and related hardware evidence. It supports an interactive
 TUI and a headless CLI path.
 
 `Diagnose-LogonUIFreezes.ps1` is a separate read-only diagnostic for TPM,
-Windows Hello/authentication logs and unexpected shutdown evidence.
+Windows Hello/authentication logs and unexpected shutdown evidence. It is a
+focused baseline derived from a specific incident, not a complete generic PC
+diagnostic.
 
 Codex, Gemini and automation use the direct headless CLI documented in
 `docs\AGENT_RUNBOOK.md`. There is no second agent-specific runner.
@@ -68,13 +70,23 @@ non-executable evidence. They are not supported entry points.
 
 - `Ctrl+L` opens LAN target selection; ordinary CLI use with `-ComputerName`
   remains available.
+- Interactive target selection is followed by an account/authentication choice:
+  saved DPAPI/secure prompt or an explicitly blank password. TUI flows must not
+  contain a target-specific username default.
 - `E` exports Markdown and CSV reports under `exports\`.
-- `F` is the explicit Fast Startup quick action. Local mutation uses narrow
-  elevation; remote mutation uses the already authenticated session.
+- `F` opens an explicit Registry-change confirmation, captures
+  `HiberbootEnabled` before-state and verifies readback. Local mutation uses
+  narrow elevation when required; remote mutation opens a fresh bounded
+  authenticated session because the read-only diagnostic session has already
+  been closed.
 - Common actions belong in the TUI. CLI switches remain available for automation
   and advanced use.
 - Agents use the CLI path directly. They must supply an explicit target and must
   never inherit a historical IP, username or blank-password assumption.
+- Canonical collectors are a repeatable baseline, not an exhaustive checklist.
+  Agents may add bounded incident-specific read-only queries through the
+  canonical connection path, must report them explicitly, and should not turn a
+  one-off probe into a permanent script without reusable tests.
 - TUI rendering follows the shared `PS_UI_Blueprint.psm1`; terminal behavior is
   not considered verified by a headless text-only test.
 
@@ -116,6 +128,7 @@ Minimum checks for affected code:
 - PowerShell AST/parser check for all changed `.ps1`, `.psm1` and `.psd1` files.
 - `tests\Test-EventViewerAgentContract.ps1`
 - `tests\Test-DiagnoseLogonUIContract.ps1`
+- `tests\Test-EventViewerTuiContract.ps1`
 - `tests\Test-EventViewerWinRMWorkshop.ps1`
 - `tests\Test-Connect-EventViewerTarget.ps1`
 - `tests\Test-EventViewerFormatting.ps1` in PowerShell 7 and Windows PowerShell

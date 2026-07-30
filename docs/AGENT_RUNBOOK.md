@@ -12,7 +12,16 @@ diagnostics.
 
 `Diagnose-LogonUIFreezes.ps1` is a separate local-only focused collector for
 TPM, Windows Hello/authentication and shutdown evidence. It is not a remote
-wrapper and does not replace the canonical `Analyze-EventViewer.ps1` flow.
+wrapper, a complete PC diagnostic, or a replacement for the canonical
+`Analyze-EventViewer.ps1` flow.
+
+The canonical scripts are repeatable evidence baselines, not limits on the
+investigation. When the reported symptoms are not covered, an agent may add
+bounded incident-specific read-only queries through the canonical connection
+path. It must report the exact additional commands/evidence and their
+permission level. Keep one-off probes in the case record; promote them into a
+maintained script only when they are safe, reusable and backed by focused
+tests.
 
 ## Canonical read-only flow
 

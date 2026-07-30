@@ -61,13 +61,25 @@ $isRemote = -not [string]::IsNullOrEmpty($ComputerName) -and
             ($ComputerName -ne $env:COMPUTERNAME)
 
 $runTui = $Interactive -or ($null -eq $PSBoundParameters["ComputerName"] -and $null -eq $PSBoundParameters["Credential"])
+$script:EventViewerUserNameWasExplicit = $PSBoundParameters.ContainsKey('UserName')
+$script:EventViewerCredentialWasExplicit = $PSBoundParameters.ContainsKey('Credential')
 
 if ($runTui) {
-    $blueprintPath = "C:\Users\joty79\.agent-shared\templates\PS_UI_Blueprint.psm1"
-    if (Test-Path -LiteralPath $blueprintPath) {
+    $blueprintCandidates = @(
+        (Join-Path $env:USERPROFILE '.agent-shared\templates\PS_UI_Blueprint.psm1')
+        'C:\Users\joty79\.agent-shared\templates\PS_UI_Blueprint.psm1'
+        'D:\Users\joty79\.agent-shared\templates\PS_UI_Blueprint.psm1'
+    ) | Select-Object -Unique
+    $blueprintPath = @(
+        $blueprintCandidates | Where-Object {
+            Test-Path -LiteralPath $_ -PathType Leaf
+        }
+    ) | Select-Object -First 1
+
+    if (-not [string]::IsNullOrWhiteSpace($blueprintPath)) {
         Invoke-Expression (Get-Content -Raw -LiteralPath $blueprintPath)
     } else {
-        Write-Warning "Could not find TUI Blueprint at: $blueprintPath"
+        Write-Warning "Could not find the canonical TUI Blueprint in any resolved .agent-shared root."
         Write-Warning "Falling back to standard CLI mode..."
         $runTui = $false
     }
@@ -338,6 +350,7 @@ function Get-DiagnosticsData {
             $remoteData = Invoke-Command -Session $session -ScriptBlock $diagBlock -ErrorAction Stop
             $remoteData | Add-Member -NotePropertyName WinRMTarget -NotePropertyValue $TargetComputer -Force
             $remoteData | Add-Member -NotePropertyName WinRMUserName -NotePropertyValue $session.EventViewerCredential.UserName -Force
+            $remoteData | Add-Member -NotePropertyName WinRMBlankPassword -NotePropertyValue ([bool]$TargetBlankPassword) -Force
             return $remoteData
         } finally {
             Remove-PSSession -Session $session
@@ -640,47 +653,319 @@ function Export-DiagnosticsReport {
 }
 
 # Action to Disable Fast Startup
+function Invoke-VerifiedFastStartupDisable {
+    [CmdletBinding()]
+    param(
+        [scriptblock]$ReadPreference = {
+            (Get-ItemProperty `
+                -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' `
+                -Name 'HiberbootEnabled' `
+                -ErrorAction Stop).HiberbootEnabled
+        },
+
+        [scriptblock]$WriteDisabledPreference = {
+            Set-ItemProperty `
+                -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' `
+                -Name 'HiberbootEnabled' `
+                -Value 0 `
+                -Force `
+                -ErrorAction Stop
+        }
+    )
+
+    $beforeValue = & $ReadPreference
+    if ($beforeValue -ne 0) {
+        & $WriteDisabledPreference
+    }
+    $afterValue = & $ReadPreference
+
+    [PSCustomObject]@{
+        Success     = ($afterValue -eq 0)
+        Verified    = ($afterValue -eq 0)
+        Changed     = ($beforeValue -ne $afterValue)
+        BeforeValue = $beforeValue
+        AfterValue  = $afterValue
+        ErrorMessage = ''
+    }
+}
+
+function New-FastStartupFailureResult {
+    param(
+        [string]$ErrorMessage,
+        [string]$ElevationPath
+    )
+
+    [PSCustomObject]@{
+        Success       = $false
+        Verified      = $false
+        Changed       = $false
+        BeforeValue   = $null
+        AfterValue    = $null
+        ElevationPath = $ElevationPath
+        ErrorMessage  = $ErrorMessage
+    }
+}
+
 function Disable-FastStartupAction {
+    [CmdletBinding()]
     param(
         [string]$TargetComputer,
         [System.Management.Automation.PSCredential]$TargetCred,
-        [string]$TargetUserName = 'Administrator'
+        [string]$TargetUserName = 'Administrator',
+        [switch]$TargetBlankPassword
     )
     
     $isTargetRemote = -not [string]::IsNullOrEmpty($TargetComputer) -and 
                       ($TargetComputer -ne "localhost") -and 
                       ($TargetComputer -ne "127.0.0.1") -and 
                       ($TargetComputer -ne $env:COMPUTERNAME)
-                      
-    $cmdBlock = {
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Value 0 -Force -ErrorAction Stop
-    }
     
     if ($isTargetRemote) {
-        $session = Connect-EventViewerTarget `
-            -ComputerName $TargetComputer `
-            -UserName $TargetUserName `
-            -Credential $TargetCred `
-            -BlankPassword:$BlankPassword
+        $session = $null
         try {
-            Invoke-Command -Session $session -ScriptBlock $cmdBlock -ErrorAction Stop
-            return $true
+            $session = Connect-EventViewerTarget `
+                -ComputerName $TargetComputer `
+                -UserName $TargetUserName `
+                -Credential $TargetCred `
+                -BlankPassword:$TargetBlankPassword
+            $result = Invoke-Command `
+                -Session $session `
+                -ScriptBlock ${function:Invoke-VerifiedFastStartupDisable} `
+                -ErrorAction Stop
+            $result | Add-Member -NotePropertyName ElevationPath -NotePropertyValue 'RemoteAuthenticatedSession' -Force
+            return $result
         } catch {
-            return $false
+            return New-FastStartupFailureResult `
+                -ErrorMessage $_.Exception.Message `
+                -ElevationPath 'RemoteAuthenticatedSession'
         } finally {
-            Remove-PSSession -Session $session
+            if ($null -ne $session) {
+                Remove-PSSession -Session $session
+            }
         }
+    }
+
+    try {
+        $result = Invoke-VerifiedFastStartupDisable
+        $result | Add-Member -NotePropertyName ElevationPath -NotePropertyValue 'CurrentProcess' -Force
+        return $result
+    } catch {
+        $directError = $_
+        $needsElevation = (
+            $directError.Exception -is [System.UnauthorizedAccessException] -or
+            $directError.Exception -is [System.Security.SecurityException] -or
+            $directError.Exception.Message -match 'access.*denied|requested registry access is not allowed'
+        )
+        if (-not $needsElevation) {
+            return New-FastStartupFailureResult `
+                -ErrorMessage $directError.Exception.Message `
+                -ElevationPath 'CurrentProcess'
+        }
+    }
+
+    $gsudoCommand = Get-Command -Name 'gsudo.exe' -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $gsudoCommand) {
+        return New-FastStartupFailureResult `
+            -ErrorMessage 'Administrator access is required and gsudo.exe was not found.' `
+            -ElevationPath 'Unavailable'
+    }
+
+    $elevatedBody = @'
+$ErrorActionPreference = 'Stop'
+$path = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'
+$beforeValue = (Get-ItemProperty -Path $path -Name 'HiberbootEnabled' -ErrorAction Stop).HiberbootEnabled
+if ($beforeValue -ne 0) {
+    Set-ItemProperty -Path $path -Name 'HiberbootEnabled' -Value 0 -Force -ErrorAction Stop
+}
+$afterValue = (Get-ItemProperty -Path $path -Name 'HiberbootEnabled' -ErrorAction Stop).HiberbootEnabled
+if ($afterValue -ne 0) {
+    throw "HiberbootEnabled readback was '$afterValue', expected '0'."
+}
+$changed = $beforeValue -ne $afterValue
+[Console]::Out.WriteLine(('EVENTVIEWER_FASTSTARTUP_RESULT|{0}|{1}|{2}' -f $beforeValue, $afterValue, $changed))
+'@
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($elevatedBody))
+    try {
+        $elevatedOutput = @(
+            & $gsudoCommand.Source `
+                pwsh.exe `
+                -NoProfile `
+                -OutputFormat Text `
+                -EncodedCommand $encodedCommand 2>&1
+        )
+        $elevatedExitCode = $LASTEXITCODE
+    } catch {
+        return New-FastStartupFailureResult `
+            -ErrorMessage $_.Exception.Message `
+            -ElevationPath 'gsudo'
+    }
+
+    if ($elevatedExitCode -ne 0) {
+        $errorText = @($elevatedOutput | ForEach-Object { [string]$_ }) -join ' '
+        return New-FastStartupFailureResult `
+            -ErrorMessage "gsudo exited with code $elevatedExitCode. $errorText" `
+            -ElevationPath 'gsudo'
+    }
+
+    $resultPattern = [regex]'EVENTVIEWER_FASTSTARTUP_RESULT\|([^|]*)\|([^|]*)\|(True|False)'
+    $resultMarker = @(
+        $elevatedOutput | ForEach-Object { [string]$_ } |
+            Where-Object { $resultPattern.IsMatch($_) }
+    ) | Select-Object -Last 1
+    $resultMatch = if ([string]::IsNullOrWhiteSpace($resultMarker)) {
+        $null
     } else {
+        $resultPattern.Match($resultMarker)
+    }
+    if ($null -eq $resultMatch -or -not $resultMatch.Success) {
+        return New-FastStartupFailureResult `
+            -ErrorMessage 'The elevated command returned no verified before/after marker.' `
+            -ElevationPath 'gsudo'
+    }
+
+    $beforeValue = $resultMatch.Groups[1].Value
+    $afterValue = $resultMatch.Groups[2].Value
+    $changedValue = $resultMatch.Groups[3].Value
+    [PSCustomObject]@{
+        Success       = ($afterValue -eq '0')
+        Verified      = ($afterValue -eq '0')
+        Changed       = [Convert]::ToBoolean($changedValue)
+        BeforeValue   = $beforeValue
+        AfterValue    = $afterValue
+        ElevationPath = 'gsudo'
+        ErrorMessage  = ''
+    }
+}
+
+function Read-EventViewerRemoteAccountSelection {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetName,
+
+        [string]$DefaultUser = 'Administrator'
+    )
+
+    if ($script:EventViewerCredentialWasExplicit -and $null -ne $Credential) {
+        return [PSCustomObject]@{
+            UserName     = $Credential.UserName
+            Credential   = $Credential
+            BlankPassword = $false
+        }
+    }
+    if ($script:EventViewerUserNameWasExplicit -or $BlankPassword) {
+        return [PSCustomObject]@{
+            UserName     = $UserName
+            Credential   = $Credential
+            BlankPassword = [bool]$BlankPassword
+        }
+    }
+
+    Clear-TuiScreen
+    Write-Host '=== Remote account selection ===' -ForegroundColor Cyan
+    Write-Host "Target: $TargetName" -ForegroundColor Gray
+    Write-Host ''
+    Write-Host 'Enter the Windows account used by WinRM.' -ForegroundColor White
+    Write-Host "ENTER = use '$DefaultUser'." -ForegroundColor Gray
+    Write-Host 'You can cancel on the next screen with ESC.' -ForegroundColor Gray
+    Write-Host 'Account: ' -NoNewline -ForegroundColor White
+    try {
+        [Console]::CursorVisible = $true
+    } catch {}
+    try {
+        $enteredUser = Read-Host
+    } finally {
         try {
-            Invoke-Command -ScriptBlock $cmdBlock -ErrorAction Stop
-            return $true
-        } catch {
-            # Try via gsudo if local access fails due to privileges
-            try {
-                & gsudo.exe pwsh -NoProfile -Command "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -Name 'HiberbootEnabled' -Value 0 -Force"
-                return $true
-            } catch {
-                return $false
+            [Console]::CursorVisible = $false
+        } catch {}
+    }
+
+    $selectedUser = if ([string]::IsNullOrWhiteSpace($enteredUser)) {
+        $DefaultUser
+    } else {
+        $enteredUser.Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($selectedUser)) {
+        return $null
+    }
+
+    Write-Host ''
+    Write-Host "Account selected: $selectedUser" -ForegroundColor Cyan
+    Write-Host 'Choose authentication mode:' -ForegroundColor White
+    Write-Host '  ENTER / P = saved DPAPI credential or secure credential prompt' -ForegroundColor Gray
+    Write-Host '  B         = intentionally blank password (not saved)' -ForegroundColor Yellow
+    Write-Host '  ESC       = cancel and return' -ForegroundColor Red
+
+    while ($true) {
+        $authKey = Read-ConsoleKey
+        switch ($authKey.Key) {
+            'Enter' {
+                return [PSCustomObject]@{
+                    UserName      = $selectedUser
+                    Credential    = $null
+                    BlankPassword = $false
+                }
+            }
+            'P' {
+                return [PSCustomObject]@{
+                    UserName      = $selectedUser
+                    Credential    = $null
+                    BlankPassword = $false
+                }
+            }
+            'B' {
+                return [PSCustomObject]@{
+                    UserName      = $selectedUser
+                    Credential    = $null
+                    BlankPassword = $true
+                }
+            }
+            'Escape' { return $null }
+            'ResizeEvent' {
+                Write-Host ''
+                Write-Host 'Window resized. ENTER/P = credential, B = blank password, ESC = cancel.' -ForegroundColor Gray
+            }
+        }
+    }
+}
+
+function Confirm-FastStartupDisableAction {
+    param(
+        [Parameter(Mandatory)]
+        $DiagnosticData
+    )
+
+    Clear-TuiScreen
+    $targetLabel = if ([string]::IsNullOrWhiteSpace($DiagnosticData.WinRMTarget)) {
+        $DiagnosticData.ComputerName
+    } else {
+        "$($DiagnosticData.ComputerName) via $($DiagnosticData.WinRMTarget)"
+    }
+    $currentPreference = if ($null -eq $DiagnosticData.FastStartup) {
+        'unknown in the diagnostic snapshot'
+    } else {
+        [string]$DiagnosticData.FastStartup
+    }
+
+    Write-Host '=== Disable Fast Startup registry preference ===' -ForegroundColor Cyan
+    Write-Host "Target: $targetLabel" -ForegroundColor Gray
+    Write-Host "Snapshot HiberbootEnabled: $currentPreference" -ForegroundColor Gray
+    Write-Host ''
+    Write-Host 'This action reads the current value and writes 0 only when needed.' -ForegroundColor Yellow
+    Write-Host 'Success requires Registry readback of HiberbootEnabled = 0.' -ForegroundColor Yellow
+    Write-Host 'This does not prove Fast Startup caused or fixed the incident.' -ForegroundColor Yellow
+    Write-Host 'No reboot, logoff, service restart, or WinRM interruption.' -ForegroundColor Gray
+    Write-Host ''
+    Write-Host 'ENTER = continue with the Registry change' -ForegroundColor Green
+    Write-Host 'ESC   = cancel without changing anything' -ForegroundColor Red
+
+    while ($true) {
+        $confirmKey = Read-ConsoleKey
+        switch ($confirmKey.Key) {
+            'Enter' { return $true }
+            'Escape' { return $false }
+            'ResizeEvent' {
+                Write-Host ''
+                Write-Host 'Window resized. ENTER = continue; ESC = cancel.' -ForegroundColor Gray
             }
         }
     }
@@ -701,12 +986,12 @@ function Show-ScrollableDiagText {
             Lock-ViewportToWindow
             $width = Get-UiWidth
             $height = $Host.UI.RawUI.WindowSize.Height
-            $maxVisibleLines = [Math]::Max(5, $height - 11)
+            $maxVisibleLines = [Math]::Max(1, $height - 11)
             
             $rawLines = Get-FormattedDiagLines -diagData $diagData
             
             $frame = New-UiFrame
-            Add-UiFrameBanner -Frame $frame -Title $Title -Subtitle "Up/Down/PgUp/PgDn to scroll. E to export. F to disable FastStartup. Esc to return." -Width $width
+            Add-UiFrameBanner -Frame $frame -Title $Title -Subtitle "Up/Down/PgUp/PgDn scroll. E export. F disable registry preference. Esc back." -Width $width
             
             $innerWidth = $width - 4
             $borderH = (Get-UiGlyph -Name BoxH) * $innerWidth
@@ -760,7 +1045,7 @@ function Show-ScrollableDiagText {
                 New-UiShortcutSegment -Text "E" -Color $_C.Gold
                 New-UiShortcutSegment -Text " = export   " -Color $_C.Dim
                 New-UiShortcutSegment -Text "F" -Color $_C.Info
-                New-UiShortcutSegment -Text " = fix FastStartup   " -Color $_C.Dim
+                New-UiShortcutSegment -Text " = disable preference   " -Color $_C.Dim
                 New-UiShortcutSegment -Text "Esc" -Color $_C.Fail
                 New-UiShortcutSegment -Text " = back" -Color $_C.Dim
             )
@@ -786,22 +1071,46 @@ function Show-ScrollableDiagText {
                     $script:RequestForceClear = $true
                 }
                 'F' {
-                    # Fix Fast Startup action
+                    if (-not (Confirm-FastStartupDisableAction -DiagnosticData $diagData)) {
+                        $script:RequestForceClear = $true
+                        continue
+                    }
+
                     Clear-TuiScreen
-                    Write-Host "Disabling Fast Startup on $($diagData.ComputerName)..." -ForegroundColor Yellow
+                    Write-Host "Applying verified Fast Startup registry preference on $($diagData.ComputerName)..." -ForegroundColor Yellow
                     $isRemoteComputer = -not [string]::IsNullOrEmpty($diagData.WinRMTarget)
                     $credToUse = if ($isRemoteComputer) { $Credential } else { $null }
                     $compToUse = if ($isRemoteComputer) { $diagData.WinRMTarget } else { "" }
                     $userToUse = if ($isRemoteComputer) { $diagData.WinRMUserName } else { $UserName }
-
-                    $success = Disable-FastStartupAction -TargetComputer $compToUse -TargetCred $credToUse -TargetUserName $userToUse
-                    if ($success) {
-                        Write-Host "`n✅ Successfully disabled Fast Startup!" -ForegroundColor Green
-                        # Update local diagnostic representation
-                        $diagData.FastStartup = 0
+                    $blankPasswordToUse = if (
+                        $isRemoteComputer -and
+                        $null -ne $diagData.PSObject.Properties['WinRMBlankPassword']
+                    ) {
+                        [bool]$diagData.WinRMBlankPassword
                     } else {
-                        Write-Host "`n❌ Failed to disable Fast Startup. Ensure you have admin access." -ForegroundColor Red
+                        $false
                     }
+
+                    $result = Disable-FastStartupAction `
+                        -TargetComputer $compToUse `
+                        -TargetCred $credToUse `
+                        -TargetUserName $userToUse `
+                        -TargetBlankPassword:$blankPasswordToUse
+                    if ($result.Verified) {
+                        if ($result.Changed) {
+                            Write-Host "`n✅ Registry change verified: HiberbootEnabled $($result.BeforeValue) -> $($result.AfterValue)." -ForegroundColor Green
+                        } else {
+                            Write-Host "`n✅ No Registry change was needed; verified HiberbootEnabled = $($result.AfterValue)." -ForegroundColor Green
+                        }
+                        Write-Host "   Execution path: $($result.ElevationPath)" -ForegroundColor Gray
+                        $diagData.FastStartup = 0
+                        $diagData.HiberbootPreference = 0
+                    } else {
+                        Write-Host "`n❌ Fast Startup Registry change was not verified." -ForegroundColor Red
+                        Write-Host "   Path: $($result.ElevationPath)" -ForegroundColor Gray
+                        Write-Host "   Error: $($result.ErrorMessage)" -ForegroundColor DarkRed
+                    }
+                    Write-Host '   No reboot or logoff was performed.' -ForegroundColor Gray
                     Write-Host "`nPress any key to return..." -ForegroundColor Gray
                     $null = [Console]::ReadKey($true)
                     $script:RequestForceClear = $true
@@ -835,7 +1144,9 @@ function Run-RemoteDiagFlow {
         [string]$TargetComputer,
         [string]$TargetName,
         [string]$DefaultUser,
-        [string]$TargetMacAddress = 'Unknown'
+        [string]$TargetMacAddress = 'Unknown',
+        [System.Management.Automation.PSCredential]$TargetCredential,
+        [switch]$TargetBlankPassword
     )
     
     Clear-TuiScreen
@@ -844,10 +1155,10 @@ function Run-RemoteDiagFlow {
     try {
         $data = Get-DiagnosticsData `
             -TargetComputer $TargetComputer `
-            -TargetCred $Credential `
+            -TargetCred $TargetCredential `
             -TargetUserName $DefaultUser `
             -TargetAliases @($TargetName) `
-            -TargetBlankPassword:$BlankPassword
+            -TargetBlankPassword:$TargetBlankPassword
         # Canonical network-scoped history stores target metadata only, never credentials.
         $null = Add-WinRMConnectionHistoryEntry `
             -ComputerName $data.ComputerName `
@@ -868,11 +1179,31 @@ function Run-RemoteDiagFlow {
 function Connect-RemotePcFlow {
     Clear-TuiScreen
     Write-Host "=== Connect to Remote PC via WinRM ===" -ForegroundColor Cyan
+    Write-Host 'ENTER on an empty target returns to the menu.' -ForegroundColor Gray
     Write-Host "Enter Target IP Address or Computer Name: " -NoNewline -ForegroundColor White
-    $target = Read-Host
+    try {
+        [Console]::CursorVisible = $true
+    } catch {}
+    try {
+        $target = Read-Host
+    } finally {
+        try {
+            [Console]::CursorVisible = $false
+        } catch {}
+    }
     if ([string]::IsNullOrWhiteSpace($target)) { return }
-    
-    Run-RemoteDiagFlow -TargetComputer $target -TargetName $target -DefaultUser "Administrator"
+
+    $accountSelection = Read-EventViewerRemoteAccountSelection `
+        -TargetName $target `
+        -DefaultUser $UserName
+    if ($null -eq $accountSelection) { return }
+
+    Run-RemoteDiagFlow `
+        -TargetComputer $target `
+        -TargetName $target `
+        -DefaultUser $accountSelection.UserName `
+        -TargetCredential $accountSelection.Credential `
+        -TargetBlankPassword:$accountSelection.BlankPassword
 }
 
 function Invoke-LanScanFlow {
@@ -898,13 +1229,22 @@ function Invoke-LanScanFlow {
             Lock-ViewportToWindow
             $width = Get-UiWidth
             $height = $Host.UI.RawUI.WindowSize.Height
-            $maxVisible = [Math]::Max(3, $height - 8)
+            $maxVisible = [Math]::Max(1, $height - 10)
             
             $frame = New-UiFrame
             Add-UiFrameBanner -Frame $frame -Title "Network Discovered WinRM Hosts" -Subtitle "Select an active host and press Enter to connect." -Width $width
             Add-UiFrameSection -Frame $frame -Title "Discovered Active WinRM Targets" -Width $width
             
-            for ($i = 0; $i -lt $hosts.Count; $i++) {
+            $viewTop = [Math]::Max(
+                0,
+                [Math]::Min(
+                    $selIndex - [int]($maxVisible / 2),
+                    [Math]::Max(0, $hosts.Count - $maxVisible)
+                )
+            )
+            $viewBottom = [Math]::Min($viewTop + $maxVisible - 1, $hosts.Count - 1)
+
+            for ($i = $viewTop; $i -le $viewBottom; $i++) {
                 $h = $hosts[$i]
                 $lineText = "  $($h.ComputerName) ($($h.IPAddress))"
                 if ($i -eq $selIndex) {
@@ -920,6 +1260,7 @@ function Invoke-LanScanFlow {
                 New-UiShortcutSegment -Text ' navigate   ' -Color $_C.Dim
                 New-UiShortcutSegment -Text 'Enter' -Color $_C.OK
                 New-UiShortcutSegment -Text ' = connect   ' -Color $_C.Dim
+                New-UiShortcutSegment -Text "$($viewTop + 1)-$($viewBottom + 1)/$($hosts.Count)   " -Color $_C.Dim
                 New-UiShortcutSegment -Text 'Esc' -Color $_C.Fail
                 New-UiShortcutSegment -Text ' = back' -Color $_C.Dim
             )
@@ -934,11 +1275,20 @@ function Invoke-LanScanFlow {
                 'ResizeEvent' { $script:RequestForceClear = $true }
                 'Enter' {
                     $selected = $hosts[$selIndex]
+                    $accountSelection = Read-EventViewerRemoteAccountSelection `
+                        -TargetName $selected.ComputerName `
+                        -DefaultUser $UserName
+                    if ($null -eq $accountSelection) {
+                        $script:RequestForceClear = $true
+                        continue
+                    }
                     Run-RemoteDiagFlow `
                         -TargetComputer $selected.IPAddress `
                         -TargetName $selected.ComputerName `
-                        -DefaultUser "cbx_t" `
-                        -TargetMacAddress $selected.MACAddress
+                        -DefaultUser $accountSelection.UserName `
+                        -TargetMacAddress $selected.MACAddress `
+                        -TargetCredential $accountSelection.Credential `
+                        -TargetBlankPassword:$accountSelection.BlankPassword
                     $scanExit = $true
                 }
             }
@@ -967,11 +1317,18 @@ function Run-HistoryRemoteDiagFlow {
         return
     }
 
+    $accountSelection = Read-EventViewerRemoteAccountSelection `
+        -TargetName $HistoryEntry.ComputerName `
+        -DefaultUser $HistoryEntry.UserName
+    if ($null -eq $accountSelection) { return }
+
     Run-RemoteDiagFlow `
         -TargetComputer $resolvedAddress `
         -TargetName $HistoryEntry.ComputerName `
-        -DefaultUser $HistoryEntry.UserName `
-        -TargetMacAddress $HistoryEntry.MACAddress
+        -DefaultUser $accountSelection.UserName `
+        -TargetMacAddress $HistoryEntry.MACAddress `
+        -TargetCredential $accountSelection.Credential `
+        -TargetBlankPassword:$accountSelection.BlankPassword
 }
 
 function Clear-TuiScreen {
@@ -992,6 +1349,7 @@ function Invoke-EventViewerTui {
         while ($true) {
             Lock-ViewportToWindow
             $width = Get-UiWidth
+            $height = $Host.UI.RawUI.WindowSize.Height
             
             # Rebuild Menu Options based on Connection History filtered by Network ID
             $menuOptions = [System.Collections.Generic.List[string]]::new()
@@ -1041,8 +1399,21 @@ function Invoke-EventViewerTui {
             $frame = New-UiFrame
             Add-UiFrameBanner -Frame $frame -Title "EventViewer Diagnostic TUI" -Subtitle "Hardware Crashes & Dump Diagnostics Tool | Active Network: $networkName" -Width $width
             Add-UiFrameSection -Frame $frame -Title "Main Options" -Width $width
-            
-            for ($i = 0; $i -lt $menuOptions.Count; $i++) {
+
+            $maxVisibleMenuItems = [Math]::Max(1, $height - 10)
+            $menuViewTop = [Math]::Max(
+                0,
+                [Math]::Min(
+                    $selectedIndex - [int]($maxVisibleMenuItems / 2),
+                    [Math]::Max(0, $menuOptions.Count - $maxVisibleMenuItems)
+                )
+            )
+            $menuViewBottom = [Math]::Min(
+                $menuViewTop + $maxVisibleMenuItems - 1,
+                $menuOptions.Count - 1
+            )
+
+            for ($i = $menuViewTop; $i -le $menuViewBottom; $i++) {
                 if ($i -eq $selectedIndex) {
                     Add-UiFrameLine -Frame $frame -Text "$($_C.SelBg)$($_C.SelFg)$($_C.Bold)  $(Get-UiGlyph -Name SelectionArrow) $($menuOptions[$i]) $($_C.Reset)$($_C.EraseLn)"
                 } else {
@@ -1062,6 +1433,7 @@ function Invoke-EventViewerTui {
                 New-UiShortcutSegment -Text ' = select   ' -Color $_C.Dim
                 New-UiShortcutSegment -Text 'Ctrl+L' -Color $_C.Gold
                 New-UiShortcutSegment -Text ' = scan network   ' -Color $_C.Dim
+                New-UiShortcutSegment -Text "$($menuViewTop + 1)-$($menuViewBottom + 1)/$($menuOptions.Count)   " -Color $_C.Dim
                 New-UiShortcutSegment -Text 'Esc' -Color $_C.Fail
                 New-UiShortcutSegment -Text ' = exit' -Color $_C.Dim
             )
@@ -1069,7 +1441,7 @@ function Invoke-EventViewerTui {
             Write-UiFrame -Frame $frame
             
             $key = Read-ConsoleKey
-            if ($key.KeyChar -eq [char]12 -or ($key.Key -eq 'L' -and $key.VirtualKeyCode -eq 76)) {
+            if ($key.KeyChar -eq [char]12) {
                 Invoke-LanScanFlow
                 $script:RequestForceClear = $true
                 continue
