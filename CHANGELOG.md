@@ -8,6 +8,8 @@
 - Routed network identity, LAN discovery, connection history and saved-target resolution through the canonical `WinRMDiscovery` public APIs.
 - Removed the legacy repo-local subnet/TCP scanner and duplicate `history.json` runtime implementation.
 - Split the project rules into a compact `AGENTS.md` router, a current `PROJECT_RULES.md` contract and a lossless searchable historical archive/index.
+- Made the direct `Analyze-EventViewer.ps1` CLI the single Codex/Gemini automation path and added a canonical agent runbook.
+- Retired stale hardcoded test/remediation helpers and the tool-specific Antigravity relay contract into a lossless, hash-indexed, non-executable archive.
 
 ### Security
 - Explicit UI/CLI target selection now authorizes only a verified exact hostname/IP entry; wildcard and comma-list targets are rejected, and legacy `*` is narrowed to the selected target.
@@ -18,6 +20,7 @@
 ### Tests
 - Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
 - Added a focused ownership guard that rejects reintroduction of EventViewer-specific discovery/history implementations.
+- Added an agent-contract guard for the single CLI entry point, retired paths, archive hashes and ad-hoc `New-PSSession` regressions.
 - Completed a read-only live smoke on `PALIOS` (`192.168.1.7`) with its local blank-password account: discovery, exact-target elevated `TrustedHosts` readback, first-attempt authentication, full CLI diagnostics/export, canonical history resolution and bounded PTY open/exit all passed.
 
 ## [1.6.0] - 2026-07-27

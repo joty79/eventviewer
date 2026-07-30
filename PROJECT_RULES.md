@@ -1,6 +1,6 @@
 # PROJECT_RULES.md — EventViewer current contract
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-07-31
 
 ## 1. Purpose
 
@@ -11,6 +11,9 @@ TUI and a headless CLI path.
 
 `Diagnose-LogonUIFreezes.ps1` is a separate read-only diagnostic for TPM,
 Windows Hello/authentication logs and unexpected shutdown evidence.
+
+Codex, Gemini and automation use the direct headless CLI documented in
+`docs\AGENT_RUNBOOK.md`. There is no second agent-specific runner.
 
 ## 2. Current load map
 
@@ -52,9 +55,14 @@ An open TCP 5985 port is discovery evidence, not proof of authentication.
 | Client exact-target add/remove/readback for `TrustedHosts` | `WinRMWorkshop` |
 | Credential profiles, blank-password credential construction, error classification, retries and PSSession opening | `WinRMConnection` |
 | TUI keys, layout, target selection, diagnostic queries and export presentation | EventViewer |
+| Agent/headless invocation, evidence labels and mutation boundary | `docs\AGENT_RUNBOOK.md` |
 | Remote WinRM enablement, Private network, firewall, `LocalAccountTokenFilterPolicy` and blank-password target policy | explicit target-side setup/restore tool |
 
 Do not recreate any of these responsibilities ad hoc in the consumer.
+
+Old generic remote-test/remediation helpers and the tool-specific Antigravity
+relay contract are preserved under `docs\history\retired-agent-assets\` as
+non-executable evidence. They are not supported entry points.
 
 ## 5. Interactive and diagnostic behavior
 
@@ -65,6 +73,8 @@ Do not recreate any of these responsibilities ad hoc in the consumer.
   elevation; remote mutation uses the already authenticated session.
 - Common actions belong in the TUI. CLI switches remain available for automation
   and advanced use.
+- Agents use the CLI path directly. They must supply an explicit target and must
+  never inherit a historical IP, username or blank-password assumption.
 - TUI rendering follows the shared `PS_UI_Blueprint.psm1`; terminal behavior is
   not considered verified by a headless text-only test.
 
@@ -94,6 +104,7 @@ Do not recreate any of these responsibilities ad hoc in the consumer.
 Minimum checks for affected code:
 
 - PowerShell AST/parser check for all changed `.ps1`, `.psm1` and `.psd1` files.
+- `tests\Test-EventViewerAgentContract.ps1`
 - `tests\Test-EventViewerWinRMWorkshop.ps1`
 - `tests\Test-Connect-EventViewerTarget.ps1`
 - `tests\Test-EventViewerFormatting.ps1` in PowerShell 7 and Windows PowerShell

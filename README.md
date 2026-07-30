@@ -78,6 +78,17 @@
 | `-BlankPassword` | `switch` | `$false` | Χρήση ρητά γνωστού blank-password local account χωρίς αποθήκευση profile. |
 | `-Interactive` | `switch` | `$false` | Αναγκαστική εκκίνηση σε TUI Mode. |
 
+### Agent / Automation Usage
+
+Codex, Gemini και automation χρησιμοποιούν απευθείας το CLI του
+`Analyze-EventViewer.ps1` — δεν υπάρχει δεύτερο remote wrapper με αποθηκευμένο
+target ή account. Το canonical execution και verification contract βρίσκεται
+στο [docs/AGENT_RUNBOOK.md](docs/AGENT_RUNBOOK.md).
+
+Τα scripts κάτω από `docs/history/retired-agent-assets/` είναι ιστορικό evidence
+και δεν πρέπει να εκτελούνται. Τα ignored `scratch*` αρχεία είναι προσωπικά
+experiments και όχι supported project entry points.
+
 ---
 
 ## 🔐 Diagnose-LogonUIFreezes.ps1
@@ -149,8 +160,9 @@ eventviewer/
 │   ├── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
 │   └── WinRMWorkshop/                   # Pinned exact-target TrustedHosts preparation
 ├── docs/history/                        # Searchable lossless project-memory archive/index
+├── docs/AGENT_RUNBOOK.md                # Canonical Codex/Gemini headless workflow
 ├── internal/EventViewer/                 # EventViewer credential/session adapter
-├── tests/                                # Focused Discovery, Workshop, connection and formatting tests
+├── tests/                                # Agent contract, Discovery, Workshop, connection and formatting tests
 ├── exports/                             # Φάκελος εξαγωγής αναφορών
 ├── Analyze-EventViewer.ps1              # Κεντρικό script διάγνωσης
 ├── Diagnose-LogonUIFreezes.ps1          # Read-only LogonUI/MSA/Windows Hello diagnostic

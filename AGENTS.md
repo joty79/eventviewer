@@ -8,6 +8,10 @@ contract. Do not load the historical archive by default; use
 [docs/history/INDEX.md](docs/history/INDEX.md) only when a past incident or
 decision is relevant.
 
+For agent-operated discovery, connection and diagnostics, load
+[docs/AGENT_RUNBOOK.md](docs/AGENT_RUNBOOK.md). The canonical headless entry
+point is `Analyze-EventViewer.ps1`; do not add a second wrapper.
+
 Before edits, confirm that this repository is the active Git root and preserve
 unrelated user changes.
 
@@ -21,6 +25,7 @@ unrelated user changes.
 | Exact-target client `TrustedHosts` preparation | canonical `WinRMWorkshop` |
 | Authentication, bounded retry, DPAPI profiles and session lifecycle | canonical `WinRMConnection` |
 | Target-side WinRM/firewall/account preparation | explicit external setup/restore workflow |
+| Codex/Gemini/headless operating procedure | `docs/AGENT_RUNBOOK.md` |
 | User documentation | `README.md` |
 | Release history | `CHANGELOG.md` |
 | Old decisions and incident evidence | `docs/history/` |
@@ -44,6 +49,9 @@ them directly; change their canonical `.agent-shared` owner and sync them.
 - Before reboot, logoff or any action that may interrupt a live target, obtain
   immediate confirmation that the specific PC is free for disruption.
 - BIOS updates are manual user actions only.
+- Files under `docs\history\retired-agent-assets\` are evidence, not executable
+  tools. Ignored `scratch*` files are user-owned experiments and are never
+  canonical agent entry points.
 
 ## Validation route
 
