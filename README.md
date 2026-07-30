@@ -28,13 +28,13 @@
 
 ### The Problem
 
-- **Αποτυχία Εγγραφής Dump (volmgr 161):** Τα ξαφνικά κρασαρίσματα συχνά δεν αφήνουν minidumps επειδή ο δίσκος αποσυνδέεται κατά τη στιγμή του crash.
-- **Outdated BIOS:** Μετά από αλλαγή μητρικής, η παλιά έκδοση BIOS προκαλεί αστάθεια στο TPM/PTT και PCIe Link States (WHEA 0x124).
-- **Fast Startup (Hiberboot):** Προκαλεί κολλήματα κατά το login ή shutdown.
+- **Αποτυχία Εγγραφής Dump (volmgr 161):** Το event αποδεικνύει ότι απέτυχε η δημιουργία dump. Μόνο συγκεκριμένα decoded status codes και χρονικά συσχετισμένα storage events μπορούν να στηρίξουν υπόθεση storage I/O failure.
+- **BIOS context:** Η έκδοση BIOS είναι χρήσιμο evidence, αλλά δεν αποδεικνύει από μόνη της TPM/PTT, PCIe ή WHEA root cause. Η current έκδοση ελέγχεται στο επίσημο support page του ακριβούς μοντέλου.
+- **Fast Startup (Hiberboot):** Η registry preference είναι ένα στοιχείο του power-state investigation, όχι από μόνη της απόδειξη ότι το τελευταίο boot χρησιμοποίησε Fast Startup ή ότι αυτό προκάλεσε το incident.
 
 ### The Solution
 
-Το script αναλύει ταυτόχρονα το System Log, το `Microsoft-Windows-Kernel-WHEA/Operational` log, τη διαμόρφωση του Pagefile και την κατάσταση των δίσκων. Επίσης, αποκωδικοποιεί τα hex parameters του `volmgr` Event 161 (π.χ. `0xC00000A1` και `0xC00001AC`).
+Το script αναλύει ταυτόχρονα το System Log, το `Microsoft-Windows-Kernel-WHEA/Operational` log, τη διαμόρφωση του Pagefile και την κατάσταση των δίσκων. Επίσης, αποκωδικοποιεί τα hex parameters του `volmgr` Event 161 (π.χ. `0xC00000A1` και `0xC00001AC`) και διαχωρίζει το απλό dump failure από ισχυρότερο decoded storage-path evidence.
 
 Το `Ctrl+L` discovery και το network-scoped connection history χρησιμοποιούν το pinned shared `WinRMDiscovery`. Τα saved targets επιλύονται ξανά με hostname/MAC/last-IP evidence πριν από σύνδεση, ώστε ένα παλιό IP να μη θεωρείται αυτόματα το ίδιο PC. Μετά την explicit επιλογή στόχου, το pinned `WinRMWorkshop` προσθέτει και επαληθεύει μόνο το exact hostname/IP στο client `TrustedHosts`, χωρίς δεύτερο prompt. Το authenticated session opening ανήκει στο pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας. Μετά την πρώτη επιτυχημένη σύνδεση, το credential αποθηκεύεται ως Windows DPAPI profile για τον ίδιο Windows user και installation.
 
@@ -188,14 +188,14 @@ eventviewer/
 <details>
 <summary><b>Γιατί αποτυγχάνει η εγγραφή Dump (volmgr 161);</b></summary>
 
-Όταν το σύστημα κρασάρει, χρησιμοποιείται ένας απλοποιημένος mini-driver (crash-dump driver) για την εγγραφή της μνήμης στο Pagefile. Αν ο δίσκος ή ο controller παρουσιάσει σφάλμα πρωτοκόλλου (status `0xC00000A1`) ή σφάλμα δεδομένων (status `0xC00001AC`), η εγγραφή αποτυγχάνει ακαριαία, αφήνοντας το Event 161 χωρίς να δημιουργηθεί minidump.
+Όταν αποτυγχάνει η δημιουργία dump μπορεί να καταγραφεί `volmgr 161`. Το event μόνο του δεν ταυτοποιεί την αιτία. Decoded status όπως `0xC00000A1` ή `0xC00001AC` υποστηρίζουν πρόβλημα στο storage I/O path, αλλά χρειάζονται timestamps, controller/disk events και πραγματικό dump configuration πριν αποδοθεί ευθύνη σε συγκεκριμένο SSD, controller ή τροφοδοσία.
 
 </details>
 
 <details>
 <summary><b>Πώς επηρεάζει το BIOS το TPM και τα κρασαρίσματα;</b></summary>
 
-Μετά από αλλαγή μητρικής, οι ασυμβατότητες microcode της CPU με το BIOS και το firmware του TPM (PTT) προκαλούν PCIe Link State errors (WHEA 0x124) κατά το login ή shutdown. Η αναβάθμιση στην έκδοση 1.32.0 σταθεροποιεί τις τάσεις και τις καταστάσεις ενέργειας.
+Η έκδοση BIOS, το microcode και το TPM firmware μπορούν να είναι σχετικά με stability investigations, αλλά δεν αποτελούν αυτόματο causal verdict. Ελέγχεται πρώτα το ακριβές μοντέλο, η current επίσημη έκδοση, τα release notes και το incident-correlated evidence. BIOS update εκτελείται μόνο χειροκίνητα από τον χρήστη.
 
 </details>
 

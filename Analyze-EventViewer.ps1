@@ -128,17 +128,26 @@ function Get-DiagnosticsData {
         $safeBootOption = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SafeBoot\Option' -ErrorAction SilentlyContinue).Option
         $safeBootStatus = if ($safeBootOption -eq 1) { "Safe Mode (Minimal)" } elseif ($safeBootOption -eq 2) { "Safe Mode (With Networking)" } else { "Normal Boot" }
 
-        $fastStartup = 0
+        $fastStartup = $null
+        $hiberboot = $null
+        $hiberGlobal = $null
+        $hiberFileExists = $null
+        $powerCfgAvailableStates = @()
+        $powerCfgQuerySucceeded = $false
         try {
-            $hiberboot = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -ErrorAction SilentlyContinue).HiberbootEnabled
-            $hiberGlobal = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "HibernateEnabled" -ErrorAction SilentlyContinue).HibernateEnabled
-            $hiberFileExists = Test-Path -Path "$env:SystemDrive\hiberfil.sys" -ErrorAction SilentlyContinue
+            $hiberboot = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -ErrorAction Stop).HiberbootEnabled
+            $fastStartup = [int]$hiberboot
+        } catch {}
+        try {
+            $hiberGlobal = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "HibernateEnabled" -ErrorAction Stop).HibernateEnabled
+        } catch {}
+        try {
+            $hiberFileExists = Test-Path -Path "$env:SystemDrive\hiberfil.sys" -ErrorAction Stop
+        } catch {}
 
-            if ($hiberboot -eq 1 -and ($null -eq $hiberGlobal -or $hiberGlobal -ne 0) -and $hiberFileExists) {
-                $fastStartup = 1
-            } else {
-                $fastStartup = 0
-            }
+        try {
+            $powerCfgAvailableStates = @(& powercfg.exe /a 2>&1 | ForEach-Object { [string]$_ })
+            $powerCfgQuerySucceeded = ($LASTEXITCODE -eq 0)
         } catch {}
 
 
@@ -148,10 +157,18 @@ function Get-DiagnosticsData {
         $minidumpDirPath = if ($crashControl.MinidumpDir) { [Environment]::ExpandEnvironmentVariables($crashControl.MinidumpDir) } else { "C:\Windows\Minidump" }
         
         # Physical Disks Info
-        $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object DeviceId, FriendlyName, OperationalStatus, HealthStatus, Size
-        $wear = try {
-            Get-PhysicalDisk -ErrorAction SilentlyContinue | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | Select-Object DeviceId, Wear, Temperature
-        } catch { @() }
+        $disks = @()
+        $diskQuerySucceeded = $false
+        try {
+            $disks = @(Get-PhysicalDisk -ErrorAction Stop | Select-Object DeviceId, FriendlyName, OperationalStatus, HealthStatus, Size)
+            $diskQuerySucceeded = $true
+        } catch {}
+        $wear = @()
+        $wearQuerySucceeded = $false
+        try {
+            $wear = @(Get-PhysicalDisk -ErrorAction Stop | Get-StorageReliabilityCounter -ErrorAction Stop | Select-Object DeviceId, Wear, Temperature)
+            $wearQuerySucceeded = $true
+        } catch {}
 
         # Check for dump files on configured paths
         $memoryDmp = Get-Item -Path $dumpFilePath -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
@@ -159,8 +176,10 @@ function Get-DiagnosticsData {
 
         # PnP Hardware Device Errors & Disabled Devices (ConfigManagerErrorCode != 0)
         $pnpErrors = [System.Collections.Generic.List[object]]::new()
+        $pnpQuerySucceeded = $false
         try {
-            $errDevs = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object { $_.ConfigManagerErrorCode -ne 0 }
+            $errDevs = Get-CimInstance Win32_PnPEntity -ErrorAction Stop | Where-Object { $_.ConfigManagerErrorCode -ne 0 }
+            $pnpQuerySucceeded = $true
             if ($errDevs) {
                 foreach ($d in $errDevs) {
                     $pnpErrors.Add([PSCustomObject]@{
@@ -180,8 +199,10 @@ function Get-DiagnosticsData {
         # ID 1001: Bugcheck
         # ID 161: volmgr dump file creation failed
         $crashEvents = [System.Collections.Generic.List[object]]::new()
+        $crashEventQuerySucceeded = $false
         try {
-            $events = Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(41, 6008, 1001, 161)} -MaxEvents 50 -ErrorAction SilentlyContinue
+            $events = Get-WinEvent -FilterHashtable @{LogName='System'; Id=@(41, 6008, 1001, 161)} -MaxEvents 50 -ErrorAction Stop
+            $crashEventQuerySucceeded = $true
             if ($events) {
                 foreach ($e in $events) {
                     $decoded = ""
@@ -212,13 +233,19 @@ function Get-DiagnosticsData {
                     })
                 }
             }
-        } catch {}
+        } catch {
+            if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound') {
+                $crashEventQuerySucceeded = $true
+            }
+        }
 
         # Read WHEA events from log
         # Microsoft-Windows-Kernel-WHEA/Operational has record of sources initialized, attestation, errors
         $wheaEvents = [System.Collections.Generic.List[object]]::new()
+        $wheaOperationalQuerySucceeded = $false
         try {
-            $events = Get-WinEvent -LogName "Microsoft-Windows-Kernel-WHEA/Operational" -MaxEvents 30 -ErrorAction SilentlyContinue
+            $events = Get-WinEvent -LogName "Microsoft-Windows-Kernel-WHEA/Operational" -MaxEvents 30 -ErrorAction Stop
+            $wheaOperationalQuerySucceeded = $true
             if ($events) {
                 foreach ($e in $events) {
                     $wheaEvents.Add([PSCustomObject]@{
@@ -228,14 +255,21 @@ function Get-DiagnosticsData {
                     })
                 }
             }
-        } catch {}
+        } catch {
+            if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound') {
+                $wheaOperationalQuerySucceeded = $true
+            }
+        }
 
         # Read System Log Warnings/Errors containing "WHEA" or "hardware error"
         $systemWheaEvents = [System.Collections.Generic.List[object]]::new()
+        $systemWheaQuerySucceeded = $false
         try {
-            $events = Get-WinEvent -FilterHashtable @{LogName='System'; Level=@(1,2,3)} -ErrorAction SilentlyContinue |
-                Where-Object { $_.ProviderName -like "*WHEA*" -or $_.Message -like "*WHEA*" -or $_.Message -like "*hardware error*" } |
-                Select-Object -First 20
+            $events = Get-WinEvent -FilterHashtable @{
+                LogName      = 'System'
+                ProviderName = 'Microsoft-Windows-WHEA-Logger'
+            } -MaxEvents 20 -ErrorAction Stop
+            $systemWheaQuerySucceeded = $true
             if ($events) {
                 foreach ($e in $events) {
                     $systemWheaEvents.Add([PSCustomObject]@{
@@ -246,7 +280,11 @@ function Get-DiagnosticsData {
                     })
                 }
             }
-        } catch {}
+        } catch {
+            if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound') {
+                $systemWheaQuerySucceeded = $true
+            }
+        }
 
         return [PSCustomObject]@{
             ComputerName      = $env:COMPUTERNAME
@@ -261,19 +299,30 @@ function Get-DiagnosticsData {
             Ram               = $ram
             SafeBootStatus    = $safeBootStatus
             FastStartup       = $fastStartup
+            HiberbootPreference = $hiberboot
+            HibernateEnabled  = $hiberGlobal
+            HiberFileExists   = $hiberFileExists
+            PowerCfgAvailableStates = $powerCfgAvailableStates
+            PowerCfgQuerySucceeded = $powerCfgQuerySucceeded
             CrashControl      = [PSCustomObject]@{
                 CrashDumpEnabled = $crashControl.CrashDumpEnabled
                 DumpFile         = $dumpFilePath
                 MinidumpDir      = $minidumpDirPath
             }
             Disks             = $disks
+            DiskQuerySucceeded = $diskQuerySucceeded
             Wear              = $wear
+            WearQuerySucceeded = $wearQuerySucceeded
             MemoryDmp         = $memoryDmp
             Minidumps         = $minidumps
             PnpErrors         = $pnpErrors
+            PnpQuerySucceeded = $pnpQuerySucceeded
             CrashEvents       = $crashEvents
+            CrashEventQuerySucceeded = $crashEventQuerySucceeded
             WheaEvents        = $wheaEvents
+            WheaOperationalQuerySucceeded = $wheaOperationalQuerySucceeded
             SystemWheaEvents  = $systemWheaEvents
+            SystemWheaQuerySucceeded = $systemWheaQuerySucceeded
         }
     }
 
@@ -313,21 +362,31 @@ function Get-FormattedDiagLines {
     $lines.Add("Motherboard:    $($diagData.Motherboard) (S/N: $($diagData.MotherboardSerial))")
     $lines.Add("BIOS Version:   $($diagData.BiosVersion) (Release: $($diagData.BiosReleaseDate))")
     
-    # Check if BIOS is outdated (Dell OptiPlex 7060 latest is 1.32.0)
-    if ($diagData.Motherboard -like "*OptiPlex 7060*" -or $diagData.BiosVersion -match '1\.(1[0-9]|2[0-9]|3[0-1])\.') {
-        if ($diagData.BiosVersion -notlike "*1.32.*") {
-            $lines.Add("")
-            $lines.Add("⚠️🚨 WARNING: Το BIOS είναι outdated ($($diagData.BiosVersion)).")
-            $lines.Add("             Η τελευταία έκδοση για το Dell OptiPlex 7060 είναι η 1.32.0 (08/11/2024).")
-            $lines.Add("             Συνιστάται αναβάθμιση BIOS για επίλυση θεμάτων PTT/TPM και PCIe ASPM.")
-        }
-    }
-    
     $lines.Add("")
     $lines.Add("=== POWER & BOOT CONFIGURATION ===")
-    $startupText = if ($diagData.FastStartup -eq 1) { "ENABLED (Ενεργό - Συνιστάται Απενεργοποίηση)" } else { "DISABLED (Απενεργοποιημένο - OK)" }
+    $startupText = if ($diagData.FastStartup -eq 1) {
+        "REGISTRY PREFERENCE ENABLED (δεν αποδεικνύει χρήση στο τελευταίο boot)"
+    } elseif ($diagData.FastStartup -eq 0) {
+        "REGISTRY PREFERENCE DISABLED"
+    } else {
+        "UNKNOWN (η registry preference δεν ήταν διαθέσιμη)"
+    }
+    $hibernateText = if ($null -eq $diagData.HibernateEnabled) { "Unknown" } else { [string]$diagData.HibernateEnabled }
+    $hiberFileText = if ($null -eq $diagData.HiberFileExists) { "Unknown" } elseif ($diagData.HiberFileExists) { "Present" } else { "Not found" }
     $lines.Add("Boot Environment:         $($diagData.SafeBootStatus)")
     $lines.Add("Fast Startup (Hiberboot): $startupText")
+    $lines.Add("HibernateEnabled:         $hibernateText")
+    $lines.Add("hiberfil.sys:             $hiberFileText")
+    if ($diagData.PowerCfgQuerySucceeded) {
+        $lines.Add("powercfg /a:")
+        foreach ($powerCfgLine in @($diagData.PowerCfgAvailableStates)) {
+            if (-not [string]::IsNullOrWhiteSpace($powerCfgLine)) {
+                $lines.Add("  $powerCfgLine")
+            }
+        }
+    } else {
+        $lines.Add("powercfg /a:              QUERY UNAVAILABLE")
+    }
     
     $lines.Add("")
     $lines.Add("=== CRASH & RECOVERY SETTINGS ===")
@@ -374,32 +433,41 @@ function Get-FormattedDiagLines {
     }
     
     $lines.Add("")
-    $lines.Add("=== PNP HARDWARE DEVICE ERRORS & DISABLED DEVICES ===")
-    if (-not $diagData.PnpErrors -or $diagData.PnpErrors.Count -eq 0) {
-        $lines.Add("  No PnP hardware device errors found.")
+    $lines.Add("=== PNP DEVICES WITH NON-ZERO CONFIG MANAGER STATUS ===")
+    if (-not $diagData.PnpQuerySucceeded) {
+        $lines.Add("  PnP query unavailable; no absence claim can be made.")
+    } elseif (-not $diagData.PnpErrors -or $diagData.PnpErrors.Count -eq 0) {
+        $lines.Add("  No devices with a non-zero ConfigManagerErrorCode were returned.")
     } else {
         foreach ($dev in $diagData.PnpErrors) {
             $errCodeText = switch ($dev.ConfigManagerErrorCode) {
-                22 { "Code 22 (Disabled in Device Manager or BIOS)" }
+                22 { "Code 22 (Disabled; may be intentional — context required)" }
                 31 { "Code 31 (Driver failed to load / missing driver)" }
                 Default { "Code $($dev.ConfigManagerErrorCode)" }
             }
-            $lines.Add("⚠️ [$($dev.Name)] | Status: $errCodeText | Manufacturer: $($dev.Manufacturer) | DeviceID: $($dev.DeviceID)")
+            $statusMarker = if ($dev.ConfigManagerErrorCode -eq 22) { "ℹ️" } else { "⚠️" }
+            $lines.Add("$statusMarker [$($dev.Name)] | Status: $errCodeText | Manufacturer: $($dev.Manufacturer) | DeviceID: $($dev.DeviceID)")
         }
     }
 
     $lines.Add("")
     $lines.Add("=== STORAGE DRIVES ===")
-    foreach ($d in $diagData.Disks) {
-        $wearInfo = $diagData.Wear | Where-Object { $_.DeviceId -eq $d.DeviceId } | Select-Object -First 1
-        $tempText = if ($wearInfo -and $wearInfo.Temperature) { "$($wearInfo.Temperature)°C" } else { "N/A" }
-        $wearText = if ($wearInfo -and $wearInfo.Wear -ne $null) { "Wear: $($wearInfo.Wear)%" } else { "" }
-        $lines.Add("Disk $($d.DeviceId): $($d.FriendlyName) | Health: $($d.HealthStatus) | Status: $($d.OperationalStatus) | Size: $([Math]::Round($d.Size/1GB, 2)) GB | Temp: $tempText $wearText")
+    if (-not $diagData.DiskQuerySucceeded) {
+        $lines.Add("  Physical-disk query unavailable; no disk-health claim can be made.")
+    } else {
+        foreach ($d in $diagData.Disks) {
+            $wearInfo = $diagData.Wear | Where-Object { $_.DeviceId -eq $d.DeviceId } | Select-Object -First 1
+            $tempText = if ($diagData.WearQuerySucceeded -and $wearInfo -and $wearInfo.Temperature) { "$($wearInfo.Temperature)°C" } else { "N/A" }
+            $wearText = if ($diagData.WearQuerySucceeded -and $wearInfo -and $wearInfo.Wear -ne $null) { "Wear counter: $($wearInfo.Wear)%" } else { "Wear counter: N/A" }
+            $lines.Add("Disk $($d.DeviceId): $($d.FriendlyName) | Windows HealthStatus: $($d.HealthStatus) | OperationalStatus: $($d.OperationalStatus) | Size: $([Math]::Round($d.Size/1GB, 2)) GB | Temp: $tempText | $wearText")
+        }
     }
     
     $lines.Add("")
     $lines.Add("=== CRASH & REBOOT HISTORY (LATEST 20 EVENTS) ===")
-    if ($diagData.CrashEvents.Count -eq 0) {
+    if (-not $diagData.CrashEventQuerySucceeded) {
+        $lines.Add("  System crash-event query unavailable; no absence claim can be made.")
+    } elseif ($diagData.CrashEvents.Count -eq 0) {
         $lines.Add("  No crash/reboot events found in the event log.")
     } else {
         foreach ($e in $diagData.CrashEvents | Select-Object -First 20) {
@@ -414,7 +482,9 @@ function Get-FormattedDiagLines {
 
     $lines.Add("")
     $lines.Add("=== KERNEL-WHEA OPERATIONAL EVENTS ===")
-    if ($diagData.WheaEvents.Count -eq 0) {
+    if (-not $diagData.WheaOperationalQuerySucceeded) {
+        $lines.Add("  Kernel-WHEA Operational query unavailable; no absence claim can be made.")
+    } elseif ($diagData.WheaEvents.Count -eq 0) {
         $lines.Add("  No Kernel-WHEA operational events found.")
     } else {
         foreach ($e in $diagData.WheaEvents | Select-Object -First 15) {
@@ -425,9 +495,11 @@ function Get-FormattedDiagLines {
     }
     
     $lines.Add("")
-    $lines.Add("=== SYSTEM LOG HARDWARE / WHEA WARNINGS & ERRORS ===")
-    if ($diagData.SystemWheaEvents.Count -eq 0) {
-        $lines.Add("  No WHEA hardware errors/warnings found in System log.")
+    $lines.Add("=== SYSTEM LOG MICROSOFT-WINDOWS-WHEA-LOGGER EVENTS ===")
+    if (-not $diagData.SystemWheaQuerySucceeded) {
+        $lines.Add("  Microsoft-Windows-WHEA-Logger query unavailable; no absence claim can be made.")
+    } elseif ($diagData.SystemWheaEvents.Count -eq 0) {
+        $lines.Add("  No Microsoft-Windows-WHEA-Logger events found in System log.")
     } else {
         foreach ($e in $diagData.SystemWheaEvents) {
             $msg = $e.Message -replace "`r?`n", " "
@@ -440,11 +512,22 @@ function Get-FormattedDiagLines {
     $lines.Add("=== DIAGNOSTICS CONCLUSION & RECOMMENDATIONS ===")
     $recIdx = 1
 
-    $amdPspError = $diagData.PnpErrors | Where-Object { $_.Name -like "*AMD PSP*" -or $_.Name -like "*Platform Security*" }
+    $amdPspError = $diagData.PnpErrors | Where-Object {
+        ($_.Name -like "*AMD PSP*" -or $_.Name -like "*Platform Security*") -and
+        $_.ConfigManagerErrorCode -ne 22
+    }
     if ($amdPspError) {
-        $lines.Add("🔴 [$recIdx] Εντοπίστηκε Σφάλμα στο AMD PSP Device (Code 22/31):")
-        $lines.Add("       Η συσκευή AMD PSP 11.0 (Platform Security Processor / fTPM) είναι απενεργοποιημένη (Code 22) ή λείπει ο οδηγός chipset.")
-        $lines.Add("       Συνιστάται ενεργοποίηση της συσκευής, επανεγκατάσταση των AMD Chipset Drivers και επαλήθευση του fTPM στο BIOS.")
+        $lines.Add("🔴 [$recIdx] Το AMD PSP Device επέστρεψε non-zero status διαφορετικό από intentional-disable Code 22:")
+        $lines.Add("       Απαιτείται συσχέτιση με το ακριβές code, driver state και το incident πριν από remediation.")
+        $recIdx++
+    }
+    $amdPspDisabled = $diagData.PnpErrors | Where-Object {
+        ($_.Name -like "*AMD PSP*" -or $_.Name -like "*Platform Security*") -and
+        $_.ConfigManagerErrorCode -eq 22
+    }
+    if ($amdPspDisabled) {
+        $lines.Add("🟡 [$recIdx] Το AMD PSP Device είναι disabled (Code 22).")
+        $lines.Add("       Αυτό μπορεί να είναι σκόπιμη ρύθμιση. Μην το ενεργοποιήσεις χωρίς επιβεβαίωση του intended state.")
         $recIdx++
     }
 
@@ -452,23 +535,24 @@ function Get-FormattedDiagLines {
     $hasVolmgr161 = $diagData.CrashEvents | Where-Object { $_.Id -eq 161 }
     if ($hasVolmgr161) {
         $lines.Add("🔴 [$recIdx] Εντοπίστηκε volmgr Event ID 161 (Αποτυχία Dump):")
-        $lines.Add("       Το λειτουργικό σύστημα κατέρρευσε (BSOD) αλλά δεν κατάφερε να γράψει dump αρχείο")
-        $lines.Add("       διότι η επικοινωνία με το δίσκο SSD χάθηκε ακαριαία (Device Protocol / Data Error).")
-        $lines.Add("       Αυτό δείχνει αστάθεια PCIe bus, controller δίσκου ή τροφοδοσίας του SSD.")
+        $lines.Add("       Το event αποδεικνύει μόνο αποτυχία δημιουργίας dump· δεν αποδεικνύει από μόνο του")
+        $lines.Add("       την αιτία του crash ούτε συγκεκριμένο SSD/controller disconnect.")
+        $decodedStorageFailures = @($hasVolmgr161 | Where-Object {
+                $_.Analysis -match 'STATUS_DEVICE_PROTOCOL_ERROR|STATUS_DEVICE_DATA_ERROR|STATUS_DEVICE_DOES_NOT_EXIST|STATUS_NO_SUCH_DEVICE'
+            })
+        if ($decodedStorageFailures.Count -gt 0) {
+            $lines.Add("       Decoded status evidence υποστηρίζει πρόβλημα στο storage I/O path· απαιτείται συσχέτιση με")
+            $lines.Add("       timestamps, controller/disk events και το πραγματικό dump configuration.")
+        } else {
+            $lines.Add("       Δεν αποκωδικοποιήθηκε storage status που να δικαιολογεί ισχυρότερο hardware συμπέρασμα.")
+        }
         $recIdx++
     }
     
     if ($diagData.FastStartup -eq 1) {
-        $lines.Add("🟡 [$recIdx] Το Fast Startup είναι Ενεργοποιημένο:")
-        $lines.Add("       Συνιστάται η απενεργοποίησή του για να αποφευχθούν σφάλματα power-state transitions")
-        $lines.Add("       που προκαλούν κρασαρίσματα κατά την εκκίνηση/τερματισμό.")
-        $recIdx++
-    }
-    
-    if ($diagData.BiosVersion -notlike "*1.32.*" -and ($diagData.Motherboard -like "*OptiPlex 7060*" -or $diagData.BiosVersion -match '1\.(1[0-9]|2[0-9]|3[0-1])\.')) {
-        $lines.Add("🔵 [$recIdx] Outdated BIOS ($($diagData.BiosVersion)):")
-        $lines.Add("       Η αναβάθμιση στην έκδοση 1.32.0 θα ενημερώσει το microcode της CPU και τις ρυθμίσεις")
-        $lines.Add("       σταθερότητας του TPM και του chipset.")
+        $lines.Add("🟡 [$recIdx] Η Fast Startup registry preference είναι enabled.")
+        $lines.Add("       Αυτό δεν αποδεικνύει ότι χρησιμοποιήθηκε στο τελευταίο boot ή ότι προκάλεσε το incident.")
+        $lines.Add("       Αξιολόγησε powercfg /a, hiberfil.sys και χρονική συσχέτιση πριν από αλλαγή.")
         $recIdx++
     }
     
@@ -502,11 +586,20 @@ function Export-DiagnosticsReport {
     $null = $sb.AppendLine("- **CPU:** $($diagData.Cpu)")
     $null = $sb.AppendLine("- **BIOS Version:** $($diagData.BiosVersion) ($($diagData.BiosReleaseDate))")
     $null = $sb.AppendLine("- **OS:** $($diagData.OSCaption) ($($diagData.OSArchitecture)) version $($diagData.OSVersion)")
-    $null = $sb.AppendLine("- **Fast Startup:** $(if($diagData.FastStartup -eq 1){"Enabled"}else{"Disabled"})")
+    $fastStartupExportText = if ($diagData.FastStartup -eq 1) {
+        'Registry preference enabled'
+    } elseif ($diagData.FastStartup -eq 0) {
+        'Registry preference disabled'
+    } else {
+        'Unknown'
+    }
+    $null = $sb.AppendLine("- **Fast Startup:** $fastStartupExportText")
+    $null = $sb.AppendLine("- **HibernateEnabled:** $($diagData.HibernateEnabled)")
+    $null = $sb.AppendLine("- **hiberfil.sys present:** $($diagData.HiberFileExists)")
     $null = $sb.AppendLine()
     
     $null = $sb.AppendLine("## Storage Drives")
-    $null = $sb.AppendLine("| Device ID | Friendly Name | Health | Status | Size (GB) |")
+    $null = $sb.AppendLine("| Device ID | Friendly Name | Windows HealthStatus | OperationalStatus | Size (GB) |")
     $null = $sb.AppendLine("|---|---|---|---|---|")
     foreach ($d in $diagData.Disks) {
         $null = $sb.AppendLine("| $($d.DeviceId) | $($d.FriendlyName) | $($d.HealthStatus) | $($d.OperationalStatus) | $([Math]::Round($d.Size/1GB, 2)) |")
@@ -534,6 +627,10 @@ function Export-DiagnosticsReport {
         BiosVersion    = $diagData.BiosVersion
         OSCaption      = $diagData.OSCaption
         FastStartup    = $diagData.FastStartup
+        HiberbootPreference = $diagData.HiberbootPreference
+        HibernateEnabled = $diagData.HibernateEnabled
+        HiberFileExists = $diagData.HiberFileExists
+        PowerCfgQuerySucceeded = $diagData.PowerCfgQuerySucceeded
     } | Export-Csv -Path $csvSpecs -NoTypeInformation -Encoding UTF8
 
     return [PSCustomObject]@{

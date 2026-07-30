@@ -95,6 +95,16 @@ non-executable evidence. They are not supported entry points.
 - `HiberbootEnabled = 1` alone does not prove active Fast Startup. Corroborate it
   with `powercfg /a`, `hiberfil.sys` state and, where practical, before/after
   evidence.
+- A failed hardware/event query must render as `unknown` or `unavailable`, never
+  as an empty/healthy result.
+- PnP Code 22 means disabled state and may be intentional. Do not recommend
+  enabling a device until its intended state and incident relevance are known.
+- `volmgr` Event ID 161 proves dump-creation failure. Attribute a storage-path
+  problem only when decoded status and correlated evidence support it; do not
+  name a specific SSD/controller from Event 161 alone.
+- Generic diagnostics must not contain a hardcoded “latest BIOS” version or
+  infer an outdated BIOS from version-number shape. Verify the exact model
+  against current official support data before making a recommendation.
 - Never run BIOS update executables automatically.
 - A parser, dry run, TCP probe or non-admin result is not proof of elevated or
   live end-to-end success.
