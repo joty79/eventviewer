@@ -1,8 +1,15 @@
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$manifestPath = Join-Path $repoRoot '.assets\WinRMConnection\WinRMConnection.psd1'
-Import-Module -Name $manifestPath -Force -ErrorAction Stop
+$workshopManifestPath = Join-Path $repoRoot '.assets\WinRMWorkshop\WinRMWorkshop.psd1'
+$connectionManifestPath = Join-Path $repoRoot '.assets\WinRMConnection\WinRMConnection.psd1'
+foreach ($requiredManifestPath in @($workshopManifestPath, $connectionManifestPath)) {
+    if (-not (Test-Path -LiteralPath $requiredManifestPath -PathType Leaf)) {
+        throw "Required shared WinRM manifest not found: $requiredManifestPath"
+    }
+}
+Import-Module -Name $workshopManifestPath -Force -ErrorAction Stop
+Import-Module -Name $connectionManifestPath -Force -ErrorAction Stop
 
 function Connect-EventViewerTarget {
     [CmdletBinding()]
@@ -21,6 +28,22 @@ function Connect-EventViewerTarget {
         [AllowEmptyString()]
         [string]$ProfileStateRoot = ''
     )
+
+    $workshopStatusHandler = {
+        param($Status)
+        if ($null -ne (Get-Command -Name 'Write-EventViewerWinRMWorkshopStatus' -ErrorAction SilentlyContinue)) {
+            Write-EventViewerWinRMWorkshopStatus -Status $Status
+        } else {
+            Write-Host ("[WinRMWorkshop:{0}] {1}" -f $Status.State, $Status.Message)
+        }
+    }
+    $workshopPreparation = Add-WinRMWorkshopTrustedHost `
+        -ComputerName $ComputerName `
+        -OnStatus $workshopStatusHandler
+    if (-not $workshopPreparation.Verified) {
+        throw "Exact-target TrustedHosts preparation was not verified for $ComputerName."
+    }
+    $ComputerName = $workshopPreparation.ComputerName
 
     $profileNames = @(
         $ComputerName
@@ -101,5 +124,6 @@ function Connect-EventViewerTarget {
 
     $session | Add-Member -NotePropertyName EventViewerCredential -NotePropertyValue $Credential -Force
     $session | Add-Member -NotePropertyName EventViewerCredentialSource -NotePropertyValue $credentialSource -Force
+    $session | Add-Member -NotePropertyName EventViewerWorkshopPreparation -NotePropertyValue $workshopPreparation -Force
     return $session
 }

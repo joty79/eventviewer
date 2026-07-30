@@ -36,7 +36,9 @@
 
 Το script αναλύει ταυτόχρονα το System Log, το `Microsoft-Windows-Kernel-WHEA/Operational` log, τη διαμόρφωση του Pagefile και την κατάσταση των δίσκων. Επίσης, αποκωδικοποιεί τα hex parameters του `volmgr` Event 161 (π.χ. `0xC00000A1` και `0xC00001AC`).
 
-Το `Ctrl+L` discovery χρησιμοποιεί το pinned shared `WinRMDiscovery`, ενώ το authenticated session opening χρησιμοποιεί το pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας. Μετά την πρώτη επιτυχημένη σύνδεση, το credential αποθηκεύεται ως Windows DPAPI profile για τον ίδιο Windows user και installation, ώστε οι επόμενες συνδέσεις στο ίδιο hostname/IP να μη ζητούν ξανά password.
+Το `Ctrl+L` discovery χρησιμοποιεί το pinned shared `WinRMDiscovery`. Μετά την explicit επιλογή στόχου, το pinned `WinRMWorkshop` προσθέτει και επαληθεύει μόνο το exact hostname/IP στο client `TrustedHosts`, χωρίς δεύτερο prompt. Το authenticated session opening ανήκει στο pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας. Μετά την πρώτη επιτυχημένη σύνδεση, το credential αποθηκεύεται ως Windows DPAPI profile για τον ίδιο Windows user και installation.
+
+Αυτό είναι convenience-oriented profile για ελεγχόμενο workshop LAN, όχι enterprise-secure default για public/shared/untrusted networks. Σε workgroup/IP connections το WinRM HTTP/NTLM δημιουργεί encrypted session μετά το authentication, αλλά δεν παρέχει certificate-backed server identity. Blank-password, Private-network, firewall και remote-UAC ρυθμίσεις ανήκουν στο explicit target-side setup/restore workflow, όχι στο EventViewer.
 
 ```
 [Local/Remote PC] ──► WinRM / Local Query ──► Gather Event Logs ──► Decode volmgr Hex
@@ -143,9 +145,10 @@ cd d:\Users\joty79\scripts\eventviewer
 eventviewer/
 ├── .assets/
 │   ├── WinRMConnection/                 # Pinned shared authenticated WinRM connector
-│   └── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
+│   ├── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
+│   └── WinRMWorkshop/                   # Pinned exact-target TrustedHosts preparation
 ├── internal/EventViewer/                 # EventViewer credential/session adapter
-├── tests/                                # Offline DPAPI credential integration tests
+├── tests/                                # Offline DPAPI and WinRMWorkshop integration tests
 ├── exports/                             # Φάκελος εξαγωγής αναφορών
 ├── Analyze-EventViewer.ps1              # Κεντρικό script διάγνωσης
 ├── Diagnose-LogonUIFreezes.ps1          # Read-only LogonUI/MSA/Windows Hello diagnostic

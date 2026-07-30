@@ -1,5 +1,20 @@
 # CHANGELOG - eventviewer
 
+## [Unreleased]
+
+### Changed
+- Routed exact-target client `TrustedHosts` preparation through the pinned canonical `WinRMWorkshop` before credential lookup or authenticated session opening.
+- Removed the EventViewer-specific WinRM service and `TrustedHosts` mutation helpers, including acceptance of legacy wildcard `*` as ready state.
+
+### Security
+- Explicit UI/CLI target selection now authorizes only a verified exact hostname/IP entry; wildcard and comma-list targets are rejected, and legacy `*` is narrowed to the selected target.
+
+### Fixed
+- Treated empty WinRM-deserialized dump-file objects as absent, preventing remote diagnostics without `MEMORY.DMP` or minidumps from failing on a missing `FullName` property.
+
+### Tests
+- Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
+
 ## [1.6.0] - 2026-07-27
 
 ### Added

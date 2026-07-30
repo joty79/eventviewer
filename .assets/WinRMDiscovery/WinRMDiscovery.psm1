@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 
 $script:WinRMDiscoveryModuleRoot = $PSScriptRoot
 $script:WinRMDiscoveryBenchmarkMode = $false
+$script:WinRMDiscoveryDiagnosticsInMemoryOnly = $false
 $script:WinRMDiscoveryLastScanResult = $null
 
 $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
@@ -635,14 +636,16 @@ function Get-DeviceCheckDiscoveredHosts {
         )
         if ($script:WinRMDiscoveryBenchmarkMode) {
             $script:WinRMDiscoveryLastScanResult = $logLines
-            $resolvedScriptRoot = $script:WinRMDiscoveryModuleRoot
-            if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = $global:PSScriptRoot }
-            if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = "." }
-            $logsDir = Join-Path -Path $resolvedScriptRoot -ChildPath 'logs'
-            if (-not (Test-Path -LiteralPath $logsDir)) { $null = New-Item -ItemType Directory -Path $logsDir -Force }
-            $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
-            $logFile = Join-Path -Path $logsDir -ChildPath "network_scan_$timestamp.log"
-            try { $logLines | Out-File -FilePath $logFile -Append -Encoding utf8 } catch {}
+            if (-not $script:WinRMDiscoveryDiagnosticsInMemoryOnly) {
+                $resolvedScriptRoot = $script:WinRMDiscoveryModuleRoot
+                if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = $global:PSScriptRoot }
+                if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = "." }
+                $logsDir = Join-Path -Path $resolvedScriptRoot -ChildPath 'logs'
+                if (-not (Test-Path -LiteralPath $logsDir)) { $null = New-Item -ItemType Directory -Path $logsDir -Force }
+                $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
+                $logFile = Join-Path -Path $logsDir -ChildPath "network_scan_$timestamp.log"
+                try { $logLines | Out-File -FilePath $logFile -Append -Encoding utf8 } catch {}
+            }
         } else {
             $script:WinRMDiscoveryLastScanResult = $null
         }
@@ -1151,16 +1154,18 @@ function Get-DeviceCheckDiscoveredHosts {
 
     if ($script:WinRMDiscoveryBenchmarkMode) {
         $script:WinRMDiscoveryLastScanResult = @($logLines)
-        $resolvedScriptRoot = $script:WinRMDiscoveryModuleRoot
-        if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = $global:PSScriptRoot }
-        if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = "." }
-        $logsDir = Join-Path -Path $resolvedScriptRoot -ChildPath 'logs'
-        if (-not (Test-Path -LiteralPath $logsDir)) { $null = New-Item -ItemType Directory -Path $logsDir -Force }
-        $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
-        $logFile = Join-Path -Path $logsDir -ChildPath "network_scan_$timestamp.log"
-        try {
-            $logLines | Out-File -FilePath $logFile -Append -Encoding utf8
-        } catch {}
+        if (-not $script:WinRMDiscoveryDiagnosticsInMemoryOnly) {
+            $resolvedScriptRoot = $script:WinRMDiscoveryModuleRoot
+            if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = $global:PSScriptRoot }
+            if ([string]::IsNullOrWhiteSpace($resolvedScriptRoot)) { $resolvedScriptRoot = "." }
+            $logsDir = Join-Path -Path $resolvedScriptRoot -ChildPath 'logs'
+            if (-not (Test-Path -LiteralPath $logsDir)) { $null = New-Item -ItemType Directory -Path $logsDir -Force }
+            $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
+            $logFile = Join-Path -Path $logsDir -ChildPath "network_scan_$timestamp.log"
+            try {
+                $logLines | Out-File -FilePath $logFile -Append -Encoding utf8
+            } catch {}
+        }
     } else {
         $script:WinRMDiscoveryLastScanResult = $null
     }
@@ -1470,7 +1475,8 @@ function Find-WinRMComputer {
     [CmdletBinding()]
     param(
         [string]$StateRoot = '',
-        [switch]$IncludeDiagnostics
+        [switch]$IncludeDiagnostics,
+        [switch]$DiagnosticsInMemoryOnly
     )
 
     if (-not [string]::IsNullOrWhiteSpace($StateRoot)) {
@@ -1478,6 +1484,7 @@ function Find-WinRMComputer {
     }
 
     $script:WinRMDiscoveryBenchmarkMode = [bool]$IncludeDiagnostics
+    $script:WinRMDiscoveryDiagnosticsInMemoryOnly = [bool]$DiagnosticsInMemoryOnly
     $ProgressPreference = 'SilentlyContinue'
     $raw = @(Get-DeviceCheckDiscoveredHosts)
     foreach ($item in $raw) {

@@ -6,8 +6,8 @@
 ---
 
 ## 🔵 2. Τεχνικές Προδιαγραφές & Κανόνες
-* **WinRM Remote Connection:** Σύνδεση με απομακρυσμένα συστήματα μέσω WinRM (παραμετροποίηση TrustedHosts αν απαιτείται). Υποστήριξη λογαριασμών με κενό κωδικό πρόσβασης (π.χ. `cbx_t` στο remote PC).
-* **Shared WinRM Runtime:** Το `Ctrl+L` discovery ανήκει στο pinned `.assets\WinRMDiscovery`, ενώ κάθε authenticated session ανοίγει μέσω pinned `.assets\WinRMConnection`. Το open TCP 5985 δεν ισοδυναμεί με επιτυχημένο authentication.
+* **WinRM Remote Connection:** Η explicit επιλογή UI/CLI εξουσιοδοτεί αυτόματη προετοιμασία μόνο του exact target στο client `TrustedHosts`, χωρίς δεύτερο prompt. Μην αποδέχεσαι ή διατηρείς wildcard `*`.
+* **Shared WinRM Runtime:** Το `Ctrl+L` discovery ανήκει στο pinned `.assets\WinRMDiscovery`, exact-target client preparation στο `.assets\WinRMWorkshop` και authentication/session lifecycle στο `.assets\WinRMConnection`. Target-side WinRM/firewall/account configuration παραμένει explicit ξεχωριστό workflow. Το open TCP 5985 δεν ισοδυναμεί με επιτυχημένο authentication.
 * **TUI Mode:** Διαδραστική διεπαφή με χρήση του `PS_UI_Blueprint.psm1` και υποστήριξη της συντόμευσης `Ctrl+L` για LAN scan (θύρα 5985).
 * **Exports:** Εξαγωγή αναφορών σε Markdown και CSV στο φάκελο `exports/` πατώντας το πλήκτρο `E` στο TUI.
 * **Hiberboot (Fast Startup):** Υποστήριξη Quick Action στο TUI (`F` key) για απενεργοποίηση του Fast Startup locally (μέσω `gsudo`) ή remotely (μέσω της WinRM PSSession).

@@ -43,6 +43,19 @@ function Write-EventViewerWinRMConnectionStatus {
     Write-Host "  WinRM: $($Status.Message)" -ForegroundColor $statusColor
 }
 
+function Write-EventViewerWinRMWorkshopStatus {
+    param([Parameter(Mandatory)]$Status)
+
+    $statusColor = if ($Status.State -eq 'Ready') {
+        'Green'
+    } elseif ($Status.State -eq 'Narrowing') {
+        'Yellow'
+    } else {
+        'Cyan'
+    }
+    Write-Host "  WinRM setup: $($Status.Message)" -ForegroundColor $statusColor
+}
+
 $isRemote = -not [string]::IsNullOrEmpty($ComputerName) -and 
             ($ComputerName -ne "localhost") -and 
             ($ComputerName -ne "127.0.0.1") -and 
@@ -178,63 +191,6 @@ function Add-ConnectionHistoryEntry {
         $null = New-Item -ItemType File -Path $historyPath -Force -ErrorAction SilentlyContinue
         $updatedHistory | ConvertTo-Json | Set-Content -LiteralPath $historyPath -Encoding UTF8
     } catch {}
-}
-
-# Helper function to ensure local WinRM service is running
-function Ensure-LocalWinRM {
-    try {
-        $winrmService = Get-Service -Name "WinRM" -ErrorAction Stop
-        if ($winrmService.Status -ne 'Running') {
-            Write-Host "Starting local WinRM service..." -ForegroundColor Gray
-            try {
-                Start-Service -Name "WinRM" -ErrorAction Stop
-            } catch {
-                Write-Host "  🔒 Local elevation required to start WinRM. Executing via gsudo..." -ForegroundColor Cyan
-                & gsudo.exe pwsh -NoProfile -Command "Start-Service -Name 'WinRM'"
-            }
-        }
-    } catch {
-        Write-Warning "Could not access or start WinRM service locally: $_"
-    }
-}
-
-# Helper function to auto-configure TrustedHosts for remote targets
-function Add-ToTrustedHosts {
-    param([string]$Target)
-    
-    Ensure-LocalWinRM
-    
-    try {
-        $hostsItem = Get-Item WSMan:\localhost\Client\TrustedHosts -ErrorAction Stop
-        $currentHosts = $hostsItem.Value
-        
-        if ($currentHosts -eq "*" -or $currentHosts.Split(",") -contains $Target) {
-            Write-Host "  ✅ Target '$Target' is already in TrustedHosts." -ForegroundColor Green
-            return
-        }
-        
-        Write-Host "  ⚠️ Target '$Target' is not in TrustedHosts. Adding..." -ForegroundColor Yellow
-        $newHosts = if ([string]::IsNullOrEmpty($currentHosts)) { $Target } else { "$currentHosts,$Target" }
-        
-        try {
-            Set-Item WSMan:\localhost\Client\TrustedHosts -Value $newHosts -Force -ErrorAction Stop
-            Write-Host "  ✅ Successfully added '$Target' to TrustedHosts." -ForegroundColor Green
-        } catch {
-            Write-Host "  🔒 Local elevation required to modify TrustedHosts. Executing via gsudo..." -ForegroundColor Cyan
-            $encodedCmd = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes("Set-Item WSMan:\localhost\Client\TrustedHosts -Value '$newHosts' -Force"))
-            & gsudo.exe pwsh -NoProfile -EncodedCommand $encodedCmd
-            
-            # Verify update
-            $verifyHosts = (Get-Item WSMan:\localhost\Client\TrustedHosts).Value
-            if ($verifyHosts.Split(",") -contains $Target -or $verifyHosts -eq "*") {
-                Write-Host "  ✅ Successfully added '$Target' to TrustedHosts via gsudo." -ForegroundColor Green
-            } else {
-                throw "Verification failed. Target still not in TrustedHosts."
-            }
-        }
-    } catch {
-        Write-Warning "❌ Failed to update TrustedHosts: $_"
-    }
 }
 
 # Canonical shared discovery with the legacy ConnectAsync path retained as fallback
@@ -552,7 +508,6 @@ function Get-DiagnosticsData {
 
 
     if ($isTargetRemote) {
-        Add-ToTrustedHosts -Target $TargetComputer
         $session = Connect-EventViewerTarget `
             -ComputerName $TargetComputer `
             -ComputerAlias $TargetAliases `
@@ -619,14 +574,28 @@ function Get-FormattedDiagLines {
     
     $lines.Add("")
     $lines.Add("=== MEMORY DUMP FILES ON DISK ===")
-    if ($diagData.MemoryDmp) {
+    $memoryDumpFullNameProperty = if ($null -ne $diagData.MemoryDmp) {
+        $diagData.MemoryDmp.PSObject.Properties['FullName']
+    } else {
+        $null
+    }
+    if ($null -ne $memoryDumpFullNameProperty -and -not [string]::IsNullOrWhiteSpace([string]$memoryDumpFullNameProperty.Value)) {
         $lines.Add("MEMORY.DMP found: $($diagData.MemoryDmp.FullName) | Size: $([Math]::Round($diagData.MemoryDmp.Length/1MB, 2)) MB | Last Written: $($diagData.MemoryDmp.LastWriteTime)")
     } else {
         $lines.Add("MEMORY.DMP: NOT FOUND")
     }
-    if ($diagData.Minidumps -and $diagData.Minidumps.Count -gt 0) {
-        $lines.Add("Minidump files found ($($diagData.Minidumps.Count)):")
-        foreach ($d in $diagData.Minidumps) {
+    $validMinidumps = @(
+        foreach ($dumpRecord in @($diagData.Minidumps)) {
+            if ($null -eq $dumpRecord) { continue }
+            $fullNameProperty = $dumpRecord.PSObject.Properties['FullName']
+            if ($null -ne $fullNameProperty -and -not [string]::IsNullOrWhiteSpace([string]$fullNameProperty.Value)) {
+                $dumpRecord
+            }
+        }
+    )
+    if ($validMinidumps.Count -gt 0) {
+        $lines.Add("Minidump files found ($($validMinidumps.Count)):")
+        foreach ($d in $validMinidumps) {
             $lines.Add("  - $([System.IO.Path]::GetFileName($d.FullName)) | Size: $([Math]::Round($d.Length/1KB, 2)) KB | Last Written: $($d.LastWriteTime)")
         }
     } else {
