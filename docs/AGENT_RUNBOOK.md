@@ -10,6 +10,10 @@ wrapper.
 The TUI is a user-facing optional surface. Agents do not need it for ordinary
 diagnostics.
 
+`Diagnose-LogonUIFreezes.ps1` is a separate local-only focused collector for
+TPM, Windows Hello/authentication and shutdown evidence. It is not a remote
+wrapper and does not replace the canonical `Analyze-EventViewer.ps1` flow.
+
 ## Canonical read-only flow
 
 1. Resolve this repository as the active workspace.
@@ -102,6 +106,25 @@ Minimum successful handoff:
 Classify TCP availability, authentication and diagnostic execution separately.
 A parser pass, TCP probe, cached history entry or non-admin check is never a
 substitute for a live authenticated result.
+
+## Optional local LogonUI evidence
+
+Use this only when the local machine's LogonUI, TPM, Windows Hello or
+authentication evidence is in scope. Agents should use a separate process and
+the strict partial-result switch:
+
+```powershell
+pwsh.exe -NoProfile -File .\Diagnose-LogonUIFreezes.ps1 `
+    -NoClear `
+    -FailOnUnavailable
+```
+
+Exit code `0` means all requested queries completed; it is not a healthy-system
+verdict. Exit code `2` means the diagnostic completed but one or more evidence
+sources were unavailable. Findings from successful queries remain usable.
+Non-admin and elevated runs are different evidence. Use narrow `gsudo.exe`
+elevation when protected local evidence matters, and report any sources that
+remain unavailable after the real elevated run.
 
 ## Retired and scratch assets
 

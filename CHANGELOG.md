@@ -18,12 +18,14 @@
 - Treated empty WinRM-deserialized dump-file objects as absent, preventing remote diagnostics without `MEMORY.DMP` or minidumps from failing on a missing `FullName` property.
 - Preserved unavailable Fast Startup, disk, PnP and event-query evidence as `unknown/unavailable` instead of silently converting it to disabled, empty or healthy state.
 - Reclassified PnP Code 22 as context-dependent disabled state, bounded `volmgr 161` to dump-failure evidence, and removed the hardcoded OptiPlex BIOS-version verdict from generic diagnostics.
+- Made the focused LogonUI diagnostic distinguish failed/protected TPM, NGC and Event Log queries from clean results, and removed causal Fast Startup/Event 41 wording.
 
 ### Tests
 - Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
 - Added a focused ownership guard that rejects reintroduction of EventViewer-specific discovery/history implementations.
 - Added an agent-contract guard for the single CLI entry point, retired paths, archive hashes and ad-hoc `New-PSSession` regressions.
 - Expanded PowerShell 7/5.1 formatting tests for unknown query state, intentional Code 22, decoded versus undecoded `volmgr 161`, and removal of unsupported causal conclusions.
+- Added a focused read-only/evidence contract test plus real non-admin and per-command elevated LogonUI diagnostic smoke coverage.
 - Completed a read-only live smoke on `PALIOS` (`192.168.1.7`) with its local blank-password account: discovery, exact-target elevated `TrustedHosts` readback, first-attempt authentication, full CLI diagnostics/export, canonical history resolution and bounded PTY open/exit all passed.
 
 ## [1.6.0] - 2026-07-27

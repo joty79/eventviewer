@@ -117,13 +117,25 @@ experiments και όχι supported project entry points.
 
 # Χωρίς Clear-Host, κατάλληλο για capture και smoke testing
 .\Diagnose-LogonUIFreezes.ps1 -NoClear
+
+# Automation: exit 2 αν ένα ή περισσότερα checks είναι unavailable
+pwsh.exe -NoProfile -File .\Diagnose-LogonUIFreezes.ps1 -NoClear -FailOnUnavailable
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `-NoClear` | `switch` | `$false` | Διατηρεί το υπάρχον terminal output. |
+| `-FailOnUnavailable` | `switch` | `$false` | Για ξεχωριστό automation process: επιστρέφει exit code `2` όταν το scan ολοκληρώθηκε με partial query coverage. Τα diagnostic findings δεν θεωρούνται execution failure. |
 
 Για πληρέστερη πρόσβαση στα System logs και στο protected NGC folder χρησιμοποίησε per-command elevation, π.χ. `gsudo.exe pwsh -NoProfile -File .\Diagnose-LogonUIFreezes.ps1 -NoClear`.
+
+Το elevated run βελτιώνει την πρόσβαση, αλλά δεν εγγυάται ότι κάθε protected
+NGC subfolder ή optional Event Log υπάρχει/διαβάζεται. Το τελικό
+`full query coverage` ή `partial query coverage` είναι το canonical completion
+status. `Access denied`, missing log και query failure εμφανίζονται ως
+`unavailable`· δεν μετατρέπονται σε «δεν βρέθηκε πρόβλημα». Οι TPM/Hello events,
+το `HiberbootEnabled` και το Event 41 είναι evidence προς συσχέτιση, όχι αυτόματο
+root-cause verdict.
 
 ---
 

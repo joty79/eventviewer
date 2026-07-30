@@ -115,6 +115,7 @@ Minimum checks for affected code:
 
 - PowerShell AST/parser check for all changed `.ps1`, `.psm1` and `.psd1` files.
 - `tests\Test-EventViewerAgentContract.ps1`
+- `tests\Test-DiagnoseLogonUIContract.ps1`
 - `tests\Test-EventViewerWinRMWorkshop.ps1`
 - `tests\Test-Connect-EventViewerTarget.ps1`
 - `tests\Test-EventViewerFormatting.ps1` in PowerShell 7 and Windows PowerShell
