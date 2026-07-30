@@ -1,7 +1,6 @@
 # Analyze-EventViewer.ps1
 # Script to diagnose system crashes, WHEA errors, and volmgr dump failures (Event ID 161).
 # Supports both CLI output mode and interactive TUI mode (PS_UI_Blueprint).
-# Version 1.1.2
 
 param(
     [Parameter(Mandatory = $false, HelpMessage = "Enter the target ComputerName or IP Address (e.g. 192.168.1.47)")]
@@ -75,235 +74,7 @@ if ($runTui) {
 }
 
 # Paths
-$historyPath = "d:\Users\joty79\scripts\eventviewer\history.json"
-$exportsDir = "d:\Users\joty79\scripts\eventviewer\exports"
-
-# Network Identity Check
-function Get-CurrentNetworkIdentity {
-    $profileName = "Unknown Network"
-    $gatewayMac = "00-00-00-00-00-00"
-    $subnetId = "0.0.0.0"
-
-    try {
-        $profile = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object IPv4Connectivity -eq 'Internet' | Select-Object -First 1
-        if ($null -eq $profile) {
-            $profile = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Select-Object -First 1
-        }
-        if ($null -ne $profile) {
-            $profileName = $profile.Name
-        }
-    } catch {}
-
-    try {
-        $routes = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue
-        if ($routes) {
-            $gatewayIp = $routes[0].NextHop
-            $neighbor = Get-NetNeighbor -IPAddress $gatewayIp -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($neighbor -and $neighbor.LinkLayerAddress) {
-                $gatewayMac = $neighbor.LinkLayerAddress.ToUpper()
-            }
-        }
-    } catch {}
-
-    try {
-        $ipInfo = $null
-        if ($null -ne $profile) {
-            $ipInfo = Get-NetIPAddress -InterfaceIndex $profile.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
-        }
-        if ($null -eq $ipInfo) {
-            $ipInfo = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.InterfaceAlias -notmatch 'Loopback|vEthernet' } |
-                Select-Object -First 1
-        }
-        if ($ipInfo -and $ipInfo.IPAddress -match '^(\d+\.\d+\.\d+)\.\d+$') {
-            $subnetId = $Matches[1]
-        }
-    } catch {}
-
-    return [PSCustomObject]@{
-        NetworkId   = "$profileName|$gatewayMac|$subnetId"
-        ProfileName = $profileName
-        GatewayMac  = $gatewayMac
-        SubnetId    = $subnetId
-    }
-}
-
-# Connection History Management
-function Get-ConnectionHistory {
-    if (Test-Path -LiteralPath $historyPath) {
-        try {
-            $content = Get-Content -LiteralPath $historyPath -Raw -ErrorAction Stop
-            $history = ConvertFrom-Json $content
-            $list = [System.Collections.Generic.List[object]]::new()
-            if ($history) {
-                foreach ($h in @($history)) {
-                    $comp = if ($h.ComputerName) { $h.ComputerName } else { "Unknown" }
-                    $ip = if ($h.IPAddress) { $h.IPAddress } else { $comp }
-                    $user = if ($h.UserName) { $h.UserName } else { "Administrator" }
-                    $netId = if ($h.NetworkId) { $h.NetworkId } else { "" }
-                    $time = if ($h.LastConnected) { $h.LastConnected } else { "" }
-                    
-                    $list.Add([PSCustomObject]@{
-                        ComputerName  = $comp
-                        IPAddress     = $ip
-                        UserName      = $user
-                        NetworkId     = $netId
-                        LastConnected = $time
-                    })
-                }
-            }
-            return @($list)
-        } catch {
-            return @()
-        }
-    }
-    return @()
-}
-
-function Add-ConnectionHistoryEntry {
-    param(
-        [string]$ComputerName,
-        [string]$IPAddress,
-        [string]$UserName
-    )
-    
-    $netId = (Get-CurrentNetworkIdentity).NetworkId
-    $history = Get-ConnectionHistory
-    
-    $history = $history | Where-Object { 
-        -not ($_.IPAddress -eq $IPAddress -and $_.NetworkId -eq $netId)
-    }
-    
-    $newEntry = [PSCustomObject]@{
-        ComputerName  = $ComputerName
-        IPAddress     = $IPAddress
-        UserName      = $UserName
-        NetworkId     = $netId
-        LastConnected = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-    }
-    
-    $updatedHistory = @($newEntry) + $history
-    if ($updatedHistory.Count -gt 15) {
-        $updatedHistory = $updatedHistory[0..14]
-    }
-    
-    try {
-        $null = New-Item -ItemType File -Path $historyPath -Force -ErrorAction SilentlyContinue
-        $updatedHistory | ConvertTo-Json | Set-Content -LiteralPath $historyPath -Encoding UTF8
-    } catch {}
-}
-
-# Canonical shared discovery with the legacy ConnectAsync path retained as fallback
-function Get-NetDiscoveredHosts {
-    if ($null -ne (Get-Command -Name 'Find-WinRMComputer' -ErrorAction SilentlyContinue)) {
-        $sharedRows = @(Find-WinRMComputer | Where-Object WinRMHttpOpen)
-        return @(
-            foreach ($sharedRow in $sharedRows) {
-                [PSCustomObject]@{
-                    IP       = $sharedRow.IPAddress
-                    HostName = $sharedRow.ComputerName
-                }
-            }
-        )
-    }
-
-    $discovered = [System.Collections.Generic.List[object]]::new()
-    
-    $interfaces = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.InterfaceAlias -notmatch 'Loopback|vEthernet' }
-        
-    if (-not $interfaces) { return $discovered }
-    
-    $neighbors = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.State -ne 'Unreachable' -and $_.IPAddress -notmatch '^\d+\.\d+\.\d+\.255$' -and $_.LinkLayerAddress -ne '00-00-00-00-00-00' }
-        
-    $gateways = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $routes = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue
-    if ($routes) {
-        foreach ($r in $routes) {
-            if (-not [string]::IsNullOrWhiteSpace($r.NextHop)) { $null = $gateways.Add($r.NextHop) }
-        }
-    }
-    
-    $localIPs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($if in $interfaces) { $null = $localIPs.Add($if.IPAddress) }
-    
-    $targetIPsSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    if ($neighbors) {
-        foreach ($n in $neighbors) { $null = $targetIPsSet.Add($n.IPAddress) }
-    }
-    
-    $targetIPs = @(
-        $targetIPsSet | Where-Object { -not $gateways.Contains($_) -and -not $localIPs.Contains($_) }
-    )
-    
-    if (-not $targetIPs) { return $discovered }
-    
-    $connections = [System.Collections.Generic.List[PSCustomObject]]::new()
-    foreach ($ip in $targetIPs) {
-        $tcp = [System.Net.Sockets.TcpClient]::new()
-        try {
-            $ipObj = [System.Net.IPAddress]::Parse($ip)
-            $task = $tcp.ConnectAsync($ipObj, 5985)
-            $connections.Add([PSCustomObject]@{
-                IP        = $ip
-                TcpClient = $tcp
-                Task      = $task
-            })
-        } catch {
-            $tcp.Dispose()
-        }
-    }
-    
-    # Wait up to 500ms
-    $swTimeout = [System.Diagnostics.Stopwatch]::StartNew()
-    while ($swTimeout.ElapsedMilliseconds -lt 500) {
-        $allDone = $true
-        foreach ($c in $connections) {
-            if (-not $c.Task.IsCompleted) {
-                $allDone = $false
-                break
-            }
-        }
-        if ($allDone) { break }
-        Start-Sleep -Milliseconds 20
-    }
-    $swTimeout.Stop()
-    
-    $winrmOpenIPs = [System.Collections.Generic.List[string]]::new()
-    foreach ($c in $connections) {
-        if ($c.Task.IsCompleted -and $c.TcpClient.Connected) {
-            $winrmOpenIPs.Add($c.IP)
-        }
-        $c.TcpClient.Dispose()
-    }
-    
-    # Resolve names asynchronously
-    $resolutionTasks = [System.Collections.Generic.List[PSCustomObject]]::new()
-    foreach ($ip in $winrmOpenIPs) {
-        try {
-            $dnsTask = [System.Net.Dns]::GetHostEntryAsync($ip)
-            $resolutionTasks.Add([PSCustomObject]@{ IP = $ip; Task = $dnsTask })
-        } catch {}
-    }
-    
-    if ($resolutionTasks.Count -gt 0) {
-        $resTasksArray = [System.Threading.Tasks.Task[]]::new($resolutionTasks.Count)
-        for ($i = 0; $i -lt $resolutionTasks.Count; $i++) { $resTasksArray[$i] = $resolutionTasks[$i].Task }
-        try { [System.Threading.Tasks.Task]::WaitAll($resTasksArray, 400) } catch {}
-    }
-    
-    foreach ($rt in $resolutionTasks) {
-        $hostName = $rt.IP
-        if ($rt.Task.IsCompleted -and -not $rt.Task.IsFaulted -and $rt.Task.Result.HostName) {
-            $hostName = $rt.Task.Result.HostName
-            if ($hostName -match '^([^.]+)\.') { $hostName = $Matches[1] }
-        }
-        $discovered.Add([PSCustomObject]@{ IP = $rt.IP; HostName = $hostName })
-    }
-    
-    return $discovered
-}
+$exportsDir = Join-Path -Path $PSScriptRoot -ChildPath 'exports'
 
 # Core Data Retrieval Function (Local or Remote)
 function Get-DiagnosticsData {
@@ -966,7 +737,8 @@ function Run-RemoteDiagFlow {
     param(
         [string]$TargetComputer,
         [string]$TargetName,
-        [string]$DefaultUser
+        [string]$DefaultUser,
+        [string]$TargetMacAddress = 'Unknown'
     )
     
     Clear-TuiScreen
@@ -979,8 +751,12 @@ function Run-RemoteDiagFlow {
             -TargetUserName $DefaultUser `
             -TargetAliases @($TargetName) `
             -TargetBlankPassword:$BlankPassword
-        # Save connection to history
-        Add-ConnectionHistoryEntry -ComputerName $data.ComputerName -IPAddress $TargetComputer -UserName $data.WinRMUserName
+        # Canonical network-scoped history stores target metadata only, never credentials.
+        $null = Add-WinRMConnectionHistoryEntry `
+            -ComputerName $data.ComputerName `
+            -LastIPAddress $TargetComputer `
+            -MACAddress $TargetMacAddress `
+            -UserName $data.WinRMUserName
         
         Show-ScrollableDiagText -Title "Remote PC Diagnostics: $($data.ComputerName) ($TargetComputer)" -diagData $data
     } catch {
@@ -1005,7 +781,10 @@ function Connect-RemotePcFlow {
 function Invoke-LanScanFlow {
     Clear-TuiScreen
     Write-Host "Scanning local network for active WinRM hosts (port 5985)..." -ForegroundColor Yellow
-    $hosts = Get-NetDiscoveredHosts
+    $hosts = @(
+        Find-WinRMComputer -IncludeDiagnostics -DiagnosticsInMemoryOnly |
+            Where-Object WinRMHttpOpen
+    )
     
     if ($hosts.Count -eq 0) {
         Write-Host "`nNo hosts with open WinRM port (5985) discovered on the network." -ForegroundColor Red
@@ -1030,7 +809,7 @@ function Invoke-LanScanFlow {
             
             for ($i = 0; $i -lt $hosts.Count; $i++) {
                 $h = $hosts[$i]
-                $lineText = "  $($h.HostName) ($($h.IP))"
+                $lineText = "  $($h.ComputerName) ($($h.IPAddress))"
                 if ($i -eq $selIndex) {
                     Add-UiFrameLine -Frame $frame -Text "$($_C.SelBg)$($_C.SelFg)$($_C.Bold)  $(Get-UiGlyph -Name SelectionArrow) $lineText $($_C.Reset)$($_C.EraseLn)"
                 } else {
@@ -1058,7 +837,11 @@ function Invoke-LanScanFlow {
                 'ResizeEvent' { $script:RequestForceClear = $true }
                 'Enter' {
                     $selected = $hosts[$selIndex]
-                    Run-RemoteDiagFlow -TargetComputer $selected.IP -TargetName $selected.HostName -DefaultUser "cbx_t"
+                    Run-RemoteDiagFlow `
+                        -TargetComputer $selected.IPAddress `
+                        -TargetName $selected.ComputerName `
+                        -DefaultUser "cbx_t" `
+                        -TargetMacAddress $selected.MACAddress
                     $scanExit = $true
                 }
             }
@@ -1066,6 +849,32 @@ function Invoke-LanScanFlow {
     } finally {
         $script:RequestForceClear = $true
     }
+}
+
+function Run-HistoryRemoteDiagFlow {
+    param([Parameter(Mandatory)]$HistoryEntry)
+
+    Clear-TuiScreen
+    Write-Host "Resolving saved target $($HistoryEntry.ComputerName)..." -ForegroundColor Gray
+
+    $resolvedAddress = Resolve-WinRMHistoryTargetAddress `
+        -ComputerName $HistoryEntry.ComputerName `
+        -LastIPAddress $HistoryEntry.LastIPAddress `
+        -MACAddress $HistoryEntry.MACAddress
+
+    if ([string]::IsNullOrWhiteSpace($resolvedAddress)) {
+        Write-Host "`n❌ The saved PC could not be verified at its current or last known address." -ForegroundColor Red
+        Write-Host "Use Ctrl+L to discover it again." -ForegroundColor Yellow
+        Write-Host "`nPress any key to return..." -ForegroundColor Gray
+        $null = [Console]::ReadKey($true)
+        return
+    }
+
+    Run-RemoteDiagFlow `
+        -TargetComputer $resolvedAddress `
+        -TargetName $HistoryEntry.ComputerName `
+        -DefaultUser $HistoryEntry.UserName `
+        -TargetMacAddress $HistoryEntry.MACAddress
 }
 
 function Clear-TuiScreen {
@@ -1078,7 +887,7 @@ function Invoke-EventViewerTui {
     Clear-TuiScreen
     
     $selectedIndex = 0
-    $netInfo = Get-CurrentNetworkIdentity
+    $netInfo = Get-WinRMNetworkIdentity
     $networkName = $netInfo.ProfileName
     $networkId = $netInfo.NetworkId
     
@@ -1101,16 +910,21 @@ function Invoke-EventViewerTui {
             $actions.Add([PSCustomObject]@{ Type = 'ConnectNew'; Label = "Connect to Remote PC" })
             
             # Connection History
-            $history = Get-ConnectionHistory | Where-Object { $_.NetworkId -eq $networkId }
+            $history = Get-WinRMConnectionHistory -NetworkId $networkId
             if ($history -and @($history).Count -gt 0) {
                 $menuOptions.Add("--- Connection History ($networkName) ---")
                 $actions.Add([PSCustomObject]@{ Type = 'Header'; Label = "Header" })
                 
                 foreach ($h in @($history)) {
-                    $displayName = if ($h.ComputerName -eq $h.IPAddress) {
-                        "  $($h.IPAddress) (user: $($h.UserName))"
+                    $historyAddress = if ([string]::IsNullOrWhiteSpace($h.LastIPAddress)) {
+                        $h.ComputerName
                     } else {
-                        "  $($h.ComputerName) ($($h.IPAddress)) (user: $($h.UserName))"
+                        $h.LastIPAddress
+                    }
+                    $displayName = if ($h.ComputerName -eq $historyAddress) {
+                        "  $historyAddress (user: $($h.UserName))"
+                    } else {
+                        "  $($h.ComputerName) ($historyAddress) (user: $($h.UserName))"
                     }
                     $menuOptions.Add($displayName)
                     $actions.Add([PSCustomObject]@{ Type = 'HistoryEntry'; Data = $h; Label = $displayName })
@@ -1186,7 +1000,7 @@ function Invoke-EventViewerTui {
                         'Scan' { Invoke-LanScanFlow }
                         'ConnectNew' { Connect-RemotePcFlow }
                         'HistoryEntry' {
-                            Run-RemoteDiagFlow -TargetComputer $action.Data.IPAddress -TargetName $action.Data.ComputerName -DefaultUser $action.Data.UserName
+                            Run-HistoryRemoteDiagFlow -HistoryEntry $action.Data
                         }
                         'Exit' { return }
                     }
@@ -1211,6 +1025,12 @@ function Show-DiagnosticsCli {
             -TargetUserName $UserName `
             -TargetAliases @($ComputerName) `
             -TargetBlankPassword:$BlankPassword
+        if ($isRemote) {
+            $null = Add-WinRMConnectionHistoryEntry `
+                -ComputerName $data.ComputerName `
+                -LastIPAddress $ComputerName `
+                -UserName $data.WinRMUserName
+        }
         $reportLines = Get-FormattedDiagLines -diagData $data
         
         foreach ($l in $reportLines) {

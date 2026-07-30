@@ -36,7 +36,7 @@
 
 Το script αναλύει ταυτόχρονα το System Log, το `Microsoft-Windows-Kernel-WHEA/Operational` log, τη διαμόρφωση του Pagefile και την κατάσταση των δίσκων. Επίσης, αποκωδικοποιεί τα hex parameters του `volmgr` Event 161 (π.χ. `0xC00000A1` και `0xC00001AC`).
 
-Το `Ctrl+L` discovery χρησιμοποιεί το pinned shared `WinRMDiscovery`. Μετά την explicit επιλογή στόχου, το pinned `WinRMWorkshop` προσθέτει και επαληθεύει μόνο το exact hostname/IP στο client `TrustedHosts`, χωρίς δεύτερο prompt. Το authenticated session opening ανήκει στο pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας. Μετά την πρώτη επιτυχημένη σύνδεση, το credential αποθηκεύεται ως Windows DPAPI profile για τον ίδιο Windows user και installation.
+Το `Ctrl+L` discovery και το network-scoped connection history χρησιμοποιούν το pinned shared `WinRMDiscovery`. Τα saved targets επιλύονται ξανά με hostname/MAC/last-IP evidence πριν από σύνδεση, ώστε ένα παλιό IP να μη θεωρείται αυτόματα το ίδιο PC. Μετά την explicit επιλογή στόχου, το pinned `WinRMWorkshop` προσθέτει και επαληθεύει μόνο το exact hostname/IP στο client `TrustedHosts`, χωρίς δεύτερο prompt. Το authenticated session opening ανήκει στο pinned `WinRMConnection`: TCP preflight, έως τρεις bounded προσπάθειες με άμεσο status, transient-only retry και σαφή κατηγορία αποτυχίας. Μετά την πρώτη επιτυχημένη σύνδεση, το credential αποθηκεύεται ως Windows DPAPI profile για τον ίδιο Windows user και installation.
 
 Αυτό είναι convenience-oriented profile για ελεγχόμενο workshop LAN, όχι enterprise-secure default για public/shared/untrusted networks. Σε workgroup/IP connections το WinRM HTTP/NTLM δημιουργεί encrypted session μετά το authentication, αλλά δεν παρέχει certificate-backed server identity. Blank-password, Private-network, firewall και remote-UAC ρυθμίσεις ανήκουν στο explicit target-side setup/restore workflow, όχι στο EventViewer.
 
@@ -143,19 +143,21 @@ cd d:\Users\joty79\scripts\eventviewer
 
 ```
 eventviewer/
+├── AGENTS.md                            # Compact project router για agents
 ├── .assets/
 │   ├── WinRMConnection/                 # Pinned shared authenticated WinRM connector
 │   ├── WinRMDiscovery/                  # Pinned shared LAN PC discovery module
 │   └── WinRMWorkshop/                   # Pinned exact-target TrustedHosts preparation
+├── docs/history/                        # Searchable lossless project-memory archive/index
 ├── internal/EventViewer/                 # EventViewer credential/session adapter
-├── tests/                                # Offline DPAPI and WinRMWorkshop integration tests
+├── tests/                                # Focused Discovery, Workshop, connection and formatting tests
 ├── exports/                             # Φάκελος εξαγωγής αναφορών
 ├── Analyze-EventViewer.ps1              # Κεντρικό script διάγνωσης
 ├── Diagnose-LogonUIFreezes.ps1          # Read-only LogonUI/MSA/Windows Hello diagnostic
 ├── doc/                                 # Case reports και diagnostic handoff contracts
 ├── NEOS/                                # NEOS case report, manuals και guarded remediation helper
 ├── OptiPlex_7060_1.32.0.exe             # BIOS Update (Λήφθηκε & Επαληθεύτηκε)
-├── PROJECT_RULES.md                     # Κανόνες & Ιστορικό διαγνώσεων
+├── PROJECT_RULES.md                     # Compact current architecture/contract
 ├── CHANGELOG.md                         # Καταγραφή εκδόσεων
 └── README.md                            # Αυτό το αρχείο
 ```

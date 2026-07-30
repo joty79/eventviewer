@@ -5,6 +5,9 @@
 ### Changed
 - Routed exact-target client `TrustedHosts` preparation through the pinned canonical `WinRMWorkshop` before credential lookup or authenticated session opening.
 - Removed the EventViewer-specific WinRM service and `TrustedHosts` mutation helpers, including acceptance of legacy wildcard `*` as ready state.
+- Routed network identity, LAN discovery, connection history and saved-target resolution through the canonical `WinRMDiscovery` public APIs.
+- Removed the legacy repo-local subnet/TCP scanner and duplicate `history.json` runtime implementation.
+- Split the project rules into a compact `AGENTS.md` router, a current `PROJECT_RULES.md` contract and a lossless searchable historical archive/index.
 
 ### Security
 - Explicit UI/CLI target selection now authorizes only a verified exact hostname/IP entry; wildcard and comma-list targets are rejected, and legacy `*` is narrowed to the selected target.
@@ -14,6 +17,8 @@
 
 ### Tests
 - Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
+- Added a focused ownership guard that rejects reintroduction of EventViewer-specific discovery/history implementations.
+- Completed a read-only live smoke on `PALIOS` (`192.168.1.7`) with its local blank-password account: discovery, exact-target elevated `TrustedHosts` readback, first-attempt authentication, full CLI diagnostics/export, canonical history resolution and bounded PTY open/exit all passed.
 
 ## [1.6.0] - 2026-07-27
 
