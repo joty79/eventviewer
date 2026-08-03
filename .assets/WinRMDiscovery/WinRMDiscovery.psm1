@@ -951,6 +951,7 @@ function Get-DeviceCheckDiscoveredHosts {
 
     # 7. Asynchronous Hostname Resolution for Online Hosts
     $swPhase.Restart()
+    $swReverseCache = [System.Diagnostics.Stopwatch]::StartNew()
 
     # Keep confirmed WS-Discovery computers visible before WinRM is enabled, without listing ARP-only phones/cameras.
     $onlineIPsSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -997,7 +998,9 @@ function Get-DeviceCheckDiscoveredHosts {
             $unresolvedIPs.Add($ip)
         }
     }
+    $timeReverseCache = $swReverseCache.Elapsed.TotalMilliseconds
 
+    $swReverseAsyncDns = [System.Diagnostics.Stopwatch]::StartNew()
     if ($unresolvedIPs.Count -gt 0) {
         $resolutionTasks = [System.Collections.Generic.List[PSCustomObject]]::new()
         foreach ($ip in $unresolvedIPs) {
@@ -1038,34 +1041,22 @@ function Get-DeviceCheckDiscoveredHosts {
             }
         }
     }
+    $timeReverseAsyncDns = $swReverseAsyncDns.Elapsed.TotalMilliseconds
 
-    # Fallback to local DNS/IP lookup if async GetHostEntry failed or timed out
+    # Do not serialize slow reverse-DNS misses in the foreground. Keep the IP
+    # visible now; the existing bounded NetBIOS pass and background resolver
+    # may improve the friendly-name cache for subsequent scans.
+    $swReverseDnsFallback = [System.Diagnostics.Stopwatch]::StartNew()
     $stillUnresolved = [System.Collections.Generic.List[string]]::new()
     foreach ($ip in $onlineIPs) {
         if (-not $resolvedNames.ContainsKey($ip)) {
-            try {
-                $dnsRes = Resolve-DnsName -Name $ip -DnsOnly -QuickTimeout -ErrorAction SilentlyContinue
-                if ($dnsRes) {
-                    $dnsName = ConvertTo-DeviceCheckHostDisplayName -HostName $dnsRes[0].NameHost -FallbackIP $ip
-                    if ($dnsName -ne $ip) {
-                        $resolvedNames[$ip] = $dnsName
-                        $hostsCache[$ip] = $dnsName
-                        Save-DeviceCheckHostsCache -Cache $hostsCache -NetworkId $currentNetworkId
-                    } else {
-                        $resolvedNames[$ip] = $ip
-                        $stillUnresolved.Add($ip)
-                    }
-                } else {
-                    $resolvedNames[$ip] = $ip
-                    $stillUnresolved.Add($ip)
-                }
-            } catch {
-                $resolvedNames[$ip] = $ip
-                $stillUnresolved.Add($ip)
-            }
+            $resolvedNames[$ip] = $ip
+            $stillUnresolved.Add($ip)
         }
     }
+    $timeReverseDnsFallback = $swReverseDnsFallback.Elapsed.TotalMilliseconds
 
+    $swReverseNetBios = [System.Diagnostics.Stopwatch]::StartNew()
     $netBiosCandidates = @(
         $stillUnresolved |
             Where-Object { ($smbOpenIPs -contains $_) -or $detectedOnlyIPsSet.Contains($_) } |
@@ -1079,6 +1070,7 @@ function Get-DeviceCheckDiscoveredHosts {
             Save-DeviceCheckHostsCache -Cache $hostsCache -NetworkId $currentNetworkId
         }
     }
+    $timeReverseNetBios = $swReverseNetBios.Elapsed.TotalMilliseconds
 
     $stillUnresolvedAfterNetBios = [System.Collections.Generic.List[string]]::new()
     foreach ($ip in $stillUnresolved) {
@@ -1089,11 +1081,14 @@ function Get-DeviceCheckDiscoveredHosts {
     $stillUnresolved = $stillUnresolvedAfterNetBios
 
     # Resolve unresolved IPs in background to populate cache for future scans
+    $swReverseBackgroundQueue = [System.Diagnostics.Stopwatch]::StartNew()
     if ($stillUnresolved.Count -gt 0) {
         Start-DeviceCheckBackgroundResolver -IPs @($stillUnresolved) -NetworkId $currentNetworkId
     }
+    $timeReverseBackgroundQueue = $swReverseBackgroundQueue.Elapsed.TotalMilliseconds
 
     # Build final scan results list
+    $swReverseResultBuild = [System.Diagnostics.Stopwatch]::StartNew()
     $scanResultsList = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($ip in $onlineIPs) {
         $name = $resolvedNames[$ip]
@@ -1104,8 +1099,10 @@ function Get-DeviceCheckDiscoveredHosts {
     }
 
     $results = @($scanResultsList)
+    $timeReverseResultBuild = $swReverseResultBuild.Elapsed.TotalMilliseconds
 
     # Final mapping & MAC lookup
+    $swReverseMacMap = [System.Diagnostics.Stopwatch]::StartNew()
     $latestNeighbors = foreach ($if in $interfaces) {
         Get-NetNeighbor -InterfaceIndex $if.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
     }
@@ -1127,6 +1124,7 @@ function Get-DeviceCheckDiscoveredHosts {
             $discovered.Add([PSCustomObject]@{ IP = $res.IP; HostName = $res.HostName; MAC = $mac; WinRmOpen = $res.WinRmOpen; SmbOpen = $res.SmbOpen; DetectedOnly = $res.DetectedOnly })
         }
     }
+    $timeReverseMacMap = $swReverseMacMap.Elapsed.TotalMilliseconds
     $timeFinalMap = $swPhase.Elapsed.TotalMilliseconds
 
     $totalMs = $swTotal.Elapsed.TotalMilliseconds
@@ -1149,6 +1147,13 @@ function Get-DeviceCheckDiscoveredHosts {
     $logLines.Add("  Phase 5 (Neighbr): $([Math]::Round($timeNeighbors, 1)) ms")
     $logLines.Add("  Phase 6 (TCPScan): $([Math]::Round($timeTcpScan, 1)) ms")
     $logLines.Add("  Phase 7 (Reverse): $([Math]::Round($timeFinalMap, 1)) ms")
+    $logLines.Add("  Phase 7a (RevCache): $([Math]::Round($timeReverseCache, 1)) ms")
+    $logLines.Add("  Phase 7b (RevAsync): $([Math]::Round($timeReverseAsyncDns, 1)) ms")
+    $logLines.Add("  Phase 7c (RevDNS): $([Math]::Round($timeReverseDnsFallback, 1)) ms")
+    $logLines.Add("  Phase 7d (NetBIOS): $([Math]::Round($timeReverseNetBios, 1)) ms")
+    $logLines.Add("  Phase 7e (BgQueue): $([Math]::Round($timeReverseBackgroundQueue, 1)) ms")
+    $logLines.Add("  Phase 7f (Result): $([Math]::Round($timeReverseResultBuild, 1)) ms")
+    $logLines.Add("  Phase 7g (MACMap): $([Math]::Round($timeReverseMacMap, 1)) ms")
     $logLines.Add("  Scan Results     : $($discovered.Count) hosts found ($($uniqueIPs.Count) unique IPs scanned)")
     $logLines.Add("")
 
@@ -1321,6 +1326,46 @@ function Get-DeviceCheckIPv4Addresses {
     }
 }
 
+function Add-DeviceCheckHistoryResolutionDiagnostic {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Diagnostics,
+        [Parameter(Mandatory)][string]$Stage,
+        [Parameter(Mandatory)][datetime]$StartUtc,
+        [Parameter(Mandatory)][System.Diagnostics.Stopwatch]$Watch,
+        [ValidateSet('success', 'failure', 'timeout', 'skipped')][string]$Status,
+        [int]$AttemptCount = 0,
+        [int]$ResultCount = 0,
+        [AllowEmptyString()][string]$ErrorCategory = ''
+    )
+
+    $Watch.Stop()
+    $Diagnostics.Add([PSCustomObject]@{
+        Stage         = $Stage
+        StartUtc      = $StartUtc.ToString('o')
+        EndUtc        = [datetime]::UtcNow.ToString('o')
+        DurationMs    = [Math]::Round($Watch.Elapsed.TotalMilliseconds, 3)
+        Status        = $Status
+        AttemptCount  = $AttemptCount
+        ResultCount   = $ResultCount
+        ErrorCategory = $ErrorCategory
+    })
+}
+
+function New-DeviceCheckHistoryResolutionResult {
+    param(
+        [AllowNull()][AllowEmptyString()][string]$ResolvedAddress = $null,
+        [AllowEmptyString()][string]$ResolutionSource = '',
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Diagnostics
+    )
+
+    return [PSCustomObject]@{
+        PSTypeName       = 'WinRMDiscovery.HistoryResolutionResult'
+        ResolvedAddress  = $ResolvedAddress
+        ResolutionSource = $ResolutionSource
+        Diagnostics      = @($Diagnostics)
+    }
+}
+
 function Resolve-HistoryTargetAddress {
     param(
         [string]$ComputerName,
@@ -1329,31 +1374,64 @@ function Resolve-HistoryTargetAddress {
     )
 
     Write-Verbose "Resolving address for target $ComputerName..."
+    $diagnostics = [System.Collections.Generic.List[object]]::new()
 
-    # 1. Try to resolve the hostname directly via DNS/LLMNR
-    try {
-        $ips = [System.Net.Dns]::GetHostAddresses($ComputerName)
-        foreach ($resolvedIp in @(Get-DeviceCheckIPv4Addresses -Addresses $ips)) {
-            if (Test-PortOpen -ComputerName $resolvedIp -Port 5985) {
-                return $resolvedIp
+    $probedIPs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $openProbedIPs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    # 1. Fast-path the last known address using the same bounded probe as the LAN sweep.
+    if (-not [string]::IsNullOrWhiteSpace($LastIPAddress) -and (Test-DeviceCheckIPv4Address -Address $LastIPAddress)) {
+        $lastIpTcpStartUtc = [datetime]::UtcNow
+        $lastIpTcpWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $lastIpOpen = Test-PortOpen -ComputerName $LastIPAddress -Port 5985 -TimeoutMs 500
+        $null = $probedIPs.Add($LastIPAddress)
+        if ($lastIpOpen) { $null = $openProbedIPs.Add($LastIPAddress) }
+        Add-DeviceCheckHistoryResolutionDiagnostic `
+            -Diagnostics $diagnostics `
+            -Stage 'Tcp5985.LastIP.FastPath' `
+            -StartUtc $lastIpTcpStartUtc `
+            -Watch $lastIpTcpWatch `
+            -Status $(if ($lastIpOpen) { 'success' } else { 'failure' }) `
+            -AttemptCount 1 `
+            -ResultCount ([int]$lastIpOpen) `
+            -ErrorCategory $(if ($lastIpOpen) { '' } else { 'PortClosedOrUnreachable' })
+
+        if ($lastIpOpen) {
+            $lastIpNeighborStartUtc = [datetime]::UtcNow
+            $lastIpNeighborWatch = [System.Diagnostics.Stopwatch]::StartNew()
+            if ([string]::IsNullOrWhiteSpace($MACAddress) -or $MACAddress -eq 'Unknown') {
+                Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'Neighbor.LastIPVerification' -StartUtc $lastIpNeighborStartUtc -Watch $lastIpNeighborWatch -Status skipped
+                return New-DeviceCheckHistoryResolutionResult -ResolvedAddress $LastIPAddress -ResolutionSource 'LastIP' -Diagnostics $diagnostics
             }
-        }
-    } catch {}
 
-    try {
-        $resolved = Resolve-DnsName -Name $ComputerName -ErrorAction SilentlyContinue
-        if ($resolved) {
-            foreach ($r in $resolved) {
-                foreach ($resolvedIp in @(Get-DeviceCheckIPv4Addresses -Addresses $r.IPAddress)) {
-                    if (Test-PortOpen -ComputerName $resolvedIp -Port 5985) {
-                        return $resolvedIp
-                    }
+            $neighbor = Get-NetNeighbor -IPAddress $LastIPAddress -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($neighbor -and $neighbor.LinkLayerAddress) {
+                $foundMac = $neighbor.LinkLayerAddress.Replace(':', '-').ToUpper()
+                $normMac = $MACAddress.Replace(':', '-').ToUpper()
+                if ($foundMac -eq $normMac) {
+                    Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'Neighbor.LastIPVerification' -StartUtc $lastIpNeighborStartUtc -Watch $lastIpNeighborWatch -Status success -AttemptCount 1 -ResultCount 1
+                    return New-DeviceCheckHistoryResolutionResult -ResolvedAddress $LastIPAddress -ResolutionSource 'LastIP' -Diagnostics $diagnostics
                 }
+                Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'Neighbor.LastIPVerification' -StartUtc $lastIpNeighborStartUtc -Watch $lastIpNeighborWatch -Status failure -AttemptCount 1 -ErrorCategory 'MacMismatch'
+            } else {
+                Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'Neighbor.LastIPVerification' -StartUtc $lastIpNeighborStartUtc -Watch $lastIpNeighborWatch -Status failure -AttemptCount 1 -ErrorCategory 'NotFound'
             }
         }
-    } catch {}
+    } else {
+        $lastIpStartUtc = [datetime]::UtcNow
+        Add-DeviceCheckHistoryResolutionDiagnostic `
+            -Diagnostics $diagnostics `
+            -Stage 'Tcp5985.LastIP.FastPath' `
+            -StartUtc $lastIpStartUtc `
+            -Watch ([System.Diagnostics.Stopwatch]::StartNew()) `
+            -Status $(if ([string]::IsNullOrWhiteSpace($LastIPAddress)) { 'skipped' } else { 'failure' }) `
+            -ErrorCategory $(if ([string]::IsNullOrWhiteSpace($LastIPAddress)) { '' } else { 'InvalidAddress' })
+    }
 
-    # 2. Check local ARP cache
+    # 2. A saved MAC can identify a DHCP-moved target without waiting for name resolution.
+    $neighborLookupStartUtc = [datetime]::UtcNow
+    $neighborLookupWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $neighbors = @()
     if (-not [string]::IsNullOrWhiteSpace($MACAddress) -and $MACAddress -ne 'Unknown') {
         $normMAC = $MACAddress.Replace(':', '-').ToUpper()
         $neighbors = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -1362,38 +1440,402 @@ function Resolve-HistoryTargetAddress {
                 if ($nMac) { $nMac = $nMac.Replace(':', '-').ToUpper() }
                 $nMac -eq $normMAC -and $_.InterfaceAlias -notmatch 'Loopback|vEthernet'
             }
-        if ($neighbors) {
-            $arpIp = $neighbors[0].IPAddress
-            if ((Test-DeviceCheckIPv4Address -Address $arpIp) -and (Test-PortOpen -ComputerName $arpIp -Port 5985)) {
-                return $arpIp
+    }
+    Add-DeviceCheckHistoryResolutionDiagnostic `
+        -Diagnostics $diagnostics `
+        -Stage 'Neighbor.MacLookup' `
+        -StartUtc $neighborLookupStartUtc `
+        -Watch $neighborLookupWatch `
+        -Status $(if ([string]::IsNullOrWhiteSpace($MACAddress) -or $MACAddress -eq 'Unknown') { 'skipped' } elseif (@($neighbors).Count -gt 0) { 'success' } else { 'failure' }) `
+        -AttemptCount $(if ([string]::IsNullOrWhiteSpace($MACAddress) -or $MACAddress -eq 'Unknown') { 0 } else { 1 }) `
+        -ResultCount @($neighbors).Count `
+        -ErrorCategory $(if (-not [string]::IsNullOrWhiteSpace($MACAddress) -and $MACAddress -ne 'Unknown' -and @($neighbors).Count -eq 0) { 'NotFound' } else { '' })
+
+    if (@($neighbors).Count -gt 0) {
+        $neighborTcpStartUtc = [datetime]::UtcNow
+        $neighborTcpWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $neighborTcpAttempts = 0
+        $neighborTcpResult = $null
+        foreach ($neighborEntry in @($neighbors)) {
+            $arpIp = [string]$neighborEntry.IPAddress
+            if (-not (Test-DeviceCheckIPv4Address -Address $arpIp) -or $probedIPs.Contains($arpIp)) { continue }
+            $null = $probedIPs.Add($arpIp)
+            $neighborTcpAttempts++
+            if (Test-PortOpen -ComputerName $arpIp -Port 5985 -TimeoutMs 500) {
+                $null = $openProbedIPs.Add($arpIp)
+                $neighborTcpResult = $arpIp
+                break
             }
+        }
+        Add-DeviceCheckHistoryResolutionDiagnostic `
+            -Diagnostics $diagnostics `
+            -Stage 'Tcp5985.Neighbor' `
+            -StartUtc $neighborTcpStartUtc `
+            -Watch $neighborTcpWatch `
+            -Status $(if ($neighborTcpResult) { 'success' } elseif ($neighborTcpAttempts -eq 0) { 'skipped' } else { 'failure' }) `
+            -AttemptCount $neighborTcpAttempts `
+            -ResultCount ([int](-not [string]::IsNullOrWhiteSpace($neighborTcpResult))) `
+            -ErrorCategory $(if ($neighborTcpResult -or $neighborTcpAttempts -eq 0) { '' } else { 'PortClosedOrUnreachable' })
+        if ($neighborTcpResult) {
+            return New-DeviceCheckHistoryResolutionResult -ResolvedAddress $neighborTcpResult -ResolutionSource 'Neighbor' -Diagnostics $diagnostics
+        }
+    } else {
+        $skippedStartUtc = [datetime]::UtcNow
+        Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'Tcp5985.Neighbor' -StartUtc $skippedStartUtc -Watch ([System.Diagnostics.Stopwatch]::StartNew()) -Status skipped
+    }
+
+    # 3. One hard-bounded Windows system resolver call covers the configured
+    # DNS/LLMNR/NetBIOS path without serially paying two negative lookups.
+    $resolveNameStartUtc = [datetime]::UtcNow
+    $resolveNameWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $resolvedIPs = @()
+    $resolveNameStatus = 'failure'
+    $resolveNameCategory = 'Unresolved'
+    try {
+        $resolveTask = [System.Net.Dns]::GetHostAddressesAsync($ComputerName)
+        if ($resolveTask.Wait(1000)) {
+            if (-not $resolveTask.IsCanceled -and -not $resolveTask.IsFaulted) {
+                $resolvedIPs = @(Get-DeviceCheckIPv4Addresses -Addresses $resolveTask.Result)
+            }
+        } else {
+            $resolveNameStatus = 'timeout'
+            $resolveNameCategory = 'Timeout'
+        }
+    } catch {}
+    $resolvedIPs = @($resolvedIPs | Select-Object -Unique)
+    if ($resolvedIPs.Count -gt 0) {
+        $resolveNameStatus = 'success'
+        $resolveNameCategory = ''
+    }
+    Add-DeviceCheckHistoryResolutionDiagnostic `
+        -Diagnostics $diagnostics `
+        -Stage 'NameResolution.SystemResolver' `
+        -StartUtc $resolveNameStartUtc `
+        -Watch $resolveNameWatch `
+        -Status $resolveNameStatus `
+        -AttemptCount 1 `
+        -ResultCount $resolvedIPs.Count `
+        -ErrorCategory $resolveNameCategory
+
+    $nameTcpStartUtc = [datetime]::UtcNow
+    $nameTcpWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $nameTcpAttempts = 0
+    $nameTcpResult = $null
+    foreach ($resolvedIp in $resolvedIPs) {
+        if ($openProbedIPs.Contains($resolvedIp)) {
+            $nameTcpResult = $resolvedIp
+            break
+        }
+        if ($probedIPs.Contains($resolvedIp)) { continue }
+        $null = $probedIPs.Add($resolvedIp)
+        $nameTcpAttempts++
+        if (Test-PortOpen -ComputerName $resolvedIp -Port 5985 -TimeoutMs 500) {
+            $nameTcpResult = $resolvedIp
+            break
+        }
+    }
+    Add-DeviceCheckHistoryResolutionDiagnostic `
+        -Diagnostics $diagnostics `
+        -Stage 'Tcp5985.NameResolution' `
+        -StartUtc $nameTcpStartUtc `
+        -Watch $nameTcpWatch `
+        -Status $(if ($nameTcpResult) { 'success' } elseif ($resolvedIPs.Count -eq 0 -or $nameTcpAttempts -eq 0) { 'skipped' } else { 'failure' }) `
+        -AttemptCount $nameTcpAttempts `
+        -ResultCount ([int](-not [string]::IsNullOrWhiteSpace($nameTcpResult))) `
+        -ErrorCategory $(if ($nameTcpResult -or $resolvedIPs.Count -eq 0 -or $nameTcpAttempts -eq 0) { '' } else { 'PortClosedOrUnreachable' })
+    if ($nameTcpResult) {
+        return New-DeviceCheckHistoryResolutionResult -ResolvedAddress $nameTcpResult -ResolutionSource 'NameResolution' -Diagnostics $diagnostics
+    }
+
+    return New-DeviceCheckHistoryResolutionResult -Diagnostics $diagnostics
+}
+
+function Get-WinRMDiscoveryObjectPropertyValue {
+    param(
+        [AllowNull()]$InputObject,
+        [Parameter(Mandatory)][string[]]$Name,
+        [AllowNull()]$DefaultValue = $null
+    )
+
+    if ($null -eq $InputObject) { return $DefaultValue }
+    foreach ($candidate in $Name) {
+        $property = $InputObject.PSObject.Properties[$candidate]
+        if ($null -ne $property -and $null -ne $property.Value) {
+            return $property.Value
+        }
+    }
+    return $DefaultValue
+}
+
+function ConvertTo-WinRMDiscoverySnapshotTarget {
+    param([Parameter(Mandatory)]$Target)
+
+    $computerName = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('ComputerName', 'HostName') -DefaultValue '')
+    $ipAddress = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('IPAddress', 'IP') -DefaultValue '')
+    $macAddress = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('MACAddress', 'MAC') -DefaultValue 'Unknown')
+    $winRMHttpOpen = [bool](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('WinRMHttpOpen', 'WinRmOpen') -DefaultValue $false)
+    $smbOpen = [bool](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('SMBOpen', 'SmbOpen') -DefaultValue $false)
+    $detectedOnly = [bool](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('DetectedOnly') -DefaultValue $false)
+    $status = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $Target -Name @('Status') -DefaultValue '')
+
+    if (-not (Test-DeviceCheckIPv4Address -Address $ipAddress)) { $ipAddress = '' }
+    if ([string]::IsNullOrWhiteSpace($computerName)) { $computerName = $ipAddress }
+    if ([string]::IsNullOrWhiteSpace($computerName) -and [string]::IsNullOrWhiteSpace($ipAddress)) { return $null }
+    if ([string]::IsNullOrWhiteSpace($macAddress)) { $macAddress = 'Unknown' }
+    if ([string]::IsNullOrWhiteSpace($status)) {
+        $status = if ($winRMHttpOpen) { 'WinRMReady' } elseif ($smbOpen) { 'WinRMDisabled' } else { 'ComputerDetected' }
+    }
+
+    return [PSCustomObject]@{
+        ComputerName  = $computerName
+        IPAddress     = $ipAddress
+        MACAddress    = $macAddress
+        WinRMHttpOpen = $winRMHttpOpen
+        SMBOpen       = $smbOpen
+        DetectedOnly  = $detectedOnly
+        Status        = $status
+    }
+}
+
+function Get-WinRMDiscoverySnapshotPath {
+    param(
+        [Parameter(Mandatory)][string]$NetworkId,
+        [switch]$CreateDirectory
+    )
+
+    if ([string]::IsNullOrWhiteSpace($NetworkId)) { throw 'NetworkId is required for a discovery snapshot.' }
+    $snapshotRoot = Join-Path -Path $script:WinRMDiscoveryStateRoot -ChildPath 'discovery-snapshots'
+    if ($CreateDirectory) {
+        $null = New-Item -ItemType Directory -Path $snapshotRoot -Force -ErrorAction Stop
+    }
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($NetworkId)
+        $hashBytes = $sha.ComputeHash($bytes)
+        $hash = -join @($hashBytes | ForEach-Object { $_.ToString('x2') })
+    } finally {
+        $sha.Dispose()
+    }
+    return Join-Path -Path $snapshotRoot -ChildPath "$hash.json"
+}
+
+function Save-WinRMDiscoverySnapshot {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$NetworkId,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Targets,
+        [datetime]$CapturedAtUtc = [datetime]::UtcNow
+    )
+
+    $path = Get-WinRMDiscoverySnapshotPath -NetworkId $NetworkId -CreateDirectory
+    $safeTargets = [System.Collections.Generic.List[object]]::new()
+    foreach ($target in @($Targets)) {
+        if ($null -eq $target) { continue }
+        $safeTarget = ConvertTo-WinRMDiscoverySnapshotTarget -Target $target
+        if ($null -ne $safeTarget) { $safeTargets.Add($safeTarget) }
+    }
+
+    $normalizedCapturedAtUtc = [datetime]::SpecifyKind($CapturedAtUtc, [System.DateTimeKind]::Utc)
+    $payload = [PSCustomObject]@{
+        SchemaVersion = 1
+        NetworkId     = $NetworkId
+        CapturedAtUtc = $normalizedCapturedAtUtc.ToString('o')
+        Targets       = @($safeTargets)
+    }
+    $temporaryPath = "$path.$([guid]::NewGuid().ToString('N')).tmp"
+    try {
+        $payload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $temporaryPath -Encoding UTF8 -ErrorAction Stop
+        Move-Item -LiteralPath $temporaryPath -Destination $path -Force -ErrorAction Stop
+    } finally {
+        if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
         }
     }
 
-    # 3. Fallback to last known IP
-    if (-not [string]::IsNullOrWhiteSpace($LastIPAddress)) {
-        if (-not (Test-DeviceCheckIPv4Address -Address $LastIPAddress)) {
-            return $null
+    return Get-WinRMDiscoverySnapshot -NetworkId $NetworkId -MaxAgeSeconds ([int]::MaxValue) -IncludeExpired
+}
+
+function Get-WinRMDiscoverySnapshot {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$NetworkId,
+        [ValidateRange(0, [int]::MaxValue)][int]$MaxAgeSeconds = 300,
+        [switch]$IncludeExpired
+    )
+
+    $path = Get-WinRMDiscoverySnapshotPath -NetworkId $NetworkId
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+
+    try {
+        $payload = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if ([string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $payload -Name @('NetworkId') -DefaultValue '') -ne $NetworkId) { return $null }
+        $capturedValue = Get-WinRMDiscoveryObjectPropertyValue -InputObject $payload -Name @('CapturedAtUtc') -DefaultValue ''
+        if ($capturedValue -is [datetimeoffset]) {
+            $capturedAtUtc = $capturedValue.UtcDateTime
+        } elseif ($capturedValue -is [datetime]) {
+            $capturedAtUtc = $capturedValue.ToUniversalTime()
+        } else {
+            $capturedAtOffset = [datetimeoffset]::Parse(
+                [string]$capturedValue,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::RoundtripKind
+            )
+            $capturedAtUtc = $capturedAtOffset.UtcDateTime
+        }
+        $ageSeconds = [Math]::Max(0, ([datetime]::UtcNow - $capturedAtUtc).TotalSeconds)
+        $isFresh = $ageSeconds -le $MaxAgeSeconds
+        if (-not $isFresh -and -not $IncludeExpired) { return $null }
+
+        $safeTargets = [System.Collections.Generic.List[object]]::new()
+        foreach ($target in @((Get-WinRMDiscoveryObjectPropertyValue -InputObject $payload -Name @('Targets') -DefaultValue @()))) {
+            if ($null -eq $target) { continue }
+            $safeTarget = ConvertTo-WinRMDiscoverySnapshotTarget -Target $target
+            if ($null -ne $safeTarget) { $safeTargets.Add($safeTarget) }
         }
 
-        if (Test-PortOpen -ComputerName $LastIPAddress -Port 5985) {
-            # If MACAddress is known, verify the MAC of $LastIPAddress matches
-            if (-not [string]::IsNullOrWhiteSpace($MACAddress) -and $MACAddress -ne 'Unknown') {
-                $neighbor = Get-NetNeighbor -IPAddress $LastIPAddress -ErrorAction SilentlyContinue | Select-Object -First 1
-                if ($neighbor -and $neighbor.LinkLayerAddress) {
-                    $foundMac = $neighbor.LinkLayerAddress.Replace(':', '-').ToUpper()
-                    $normMac = $MACAddress.Replace(':', '-').ToUpper()
-                    if ($foundMac -ne $normMac) {
-                        Write-Verbose "MAC mismatch for fallback IP $LastIPAddress (expected $normMac, got $foundMac). Skipping."
-                        return $null
-                    }
-                }
-            }
-            return $LastIPAddress
+        return [PSCustomObject]@{
+            PSTypeName    = 'WinRMDiscovery.DiscoverySnapshot'
+            NetworkId     = $NetworkId
+            CapturedAtUtc = $capturedAtUtc.ToString('o')
+            AgeSeconds    = [Math]::Round($ageSeconds, 3)
+            IsFresh       = $isFresh
+            TargetCount   = $safeTargets.Count
+            Targets       = @($safeTargets)
         }
+    } catch {
+        return $null
+    }
+}
+
+function Get-WinRMTargetCatalog {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string]$NetworkId = '',
+        [ValidateRange(0, [int]::MaxValue)][int]$SnapshotMaxAgeSeconds = 300,
+        [switch]$IncludeDiagnostics
+    )
+
+    if ([string]::IsNullOrWhiteSpace($NetworkId)) {
+        $NetworkId = (Get-CurrentNetworkIdentity).NetworkId
+    }
+    $diagnostics = [System.Collections.Generic.List[object]]::new()
+
+    $historyStartUtc = [datetime]::UtcNow
+    $historyWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $history = @(Get-DeviceCheckConnectionHistory | Where-Object { $_.NetworkId -eq $NetworkId })
+    Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'TargetCatalog.HistoryLoad' -StartUtc $historyStartUtc -Watch $historyWatch -Status success -AttemptCount 1 -ResultCount $history.Count
+
+    $snapshotStartUtc = [datetime]::UtcNow
+    $snapshotWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $snapshot = Get-WinRMDiscoverySnapshot -NetworkId $NetworkId -MaxAgeSeconds $SnapshotMaxAgeSeconds
+    $snapshotTargets = @()
+    if ($null -ne $snapshot) { $snapshotTargets = @($snapshot.Targets) }
+    Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'TargetCatalog.SnapshotLoad' -StartUtc $snapshotStartUtc -Watch $snapshotWatch -Status $(if ($null -eq $snapshot) { 'skipped' } else { 'success' }) -AttemptCount 1 -ResultCount $snapshotTargets.Count
+
+    $mergeStartUtc = [datetime]::UtcNow
+    $mergeWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $targets = [System.Collections.Generic.List[object]]::new()
+    $byName = @{}
+    $byIp = @{}
+    $byMac = @{}
+    foreach ($entry in $history) {
+        $name = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $entry -Name @('ComputerName') -DefaultValue '')
+        $ip = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $entry -Name @('LastIPAddress') -DefaultValue '')
+        $mac = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $entry -Name @('MACAddress') -DefaultValue 'Unknown')
+        if (-not (Test-DeviceCheckIPv4Address -Address $ip)) { $ip = '' }
+        if ([string]::IsNullOrWhiteSpace($mac)) { $mac = 'Unknown' }
+        $row = [PSCustomObject]@{
+            PSTypeName          = 'WinRMDiscovery.TargetCatalogEntry'
+            ComputerName        = $name
+            IPAddress           = $ip
+            MACAddress          = $mac
+            UserName            = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $entry -Name @('UserName') -DefaultValue 'Unknown')
+            NetworkId           = $NetworkId
+            LastConnected       = [string](Get-WinRMDiscoveryObjectPropertyValue -InputObject $entry -Name @('LastConnected') -DefaultValue '')
+            Source              = 'SavedHistory'
+            HasSavedHistory     = $true
+            HasDiscoverySnapshot = $false
+            RequiresValidation  = $true
+            ValidationStatus    = 'NotChecked'
+            CachedStatus        = ''
+            WinRMHttpOpen       = $null
+            SMBOpen             = $null
+            DetectedOnly        = $false
+        }
+        $index = $targets.Count
+        $targets.Add($row)
+        if (-not [string]::IsNullOrWhiteSpace($name)) { $byName[$name.ToLowerInvariant()] = $index }
+        if (-not [string]::IsNullOrWhiteSpace($ip)) { $byIp[$ip] = $index }
+        if ($mac -ne 'Unknown') { $byMac[$mac.Replace(':', '-').ToUpperInvariant()] = $index }
     }
 
-    return $null
+    foreach ($entry in $snapshotTargets) {
+        $name = [string]$entry.ComputerName
+        $ip = [string]$entry.IPAddress
+        $mac = [string]$entry.MACAddress
+        $matchIndex = -1
+        if (-not [string]::IsNullOrWhiteSpace($mac) -and $mac -ne 'Unknown' -and $byMac.ContainsKey($mac.Replace(':', '-').ToUpperInvariant())) {
+            $matchIndex = [int]$byMac[$mac.Replace(':', '-').ToUpperInvariant()]
+        } elseif (-not [string]::IsNullOrWhiteSpace($ip) -and $byIp.ContainsKey($ip)) {
+            $matchIndex = [int]$byIp[$ip]
+        } elseif (-not [string]::IsNullOrWhiteSpace($name) -and $byName.ContainsKey($name.ToLowerInvariant())) {
+            $matchIndex = [int]$byName[$name.ToLowerInvariant()]
+        }
+
+        if ($matchIndex -ge 0) {
+            $row = $targets[$matchIndex]
+            if ([string]::IsNullOrWhiteSpace($row.ComputerName)) { $row.ComputerName = $name }
+            if ([string]::IsNullOrWhiteSpace($row.IPAddress)) { $row.IPAddress = $ip }
+            if ($row.MACAddress -eq 'Unknown' -and $mac -ne 'Unknown') { $row.MACAddress = $mac }
+            $row.Source = 'SavedHistory+DiscoverySnapshot'
+            $row.HasDiscoverySnapshot = $true
+            $row.CachedStatus = [string]$entry.Status
+            $row.WinRMHttpOpen = [bool]$entry.WinRMHttpOpen
+            $row.SMBOpen = [bool]$entry.SMBOpen
+            $row.DetectedOnly = [bool]$entry.DetectedOnly
+            continue
+        }
+
+        $targets.Add([PSCustomObject]@{
+            PSTypeName          = 'WinRMDiscovery.TargetCatalogEntry'
+            ComputerName        = $name
+            IPAddress           = $ip
+            MACAddress          = $mac
+            UserName            = 'Unknown'
+            NetworkId           = $NetworkId
+            LastConnected       = ''
+            Source              = 'DiscoverySnapshot'
+            HasSavedHistory     = $false
+            HasDiscoverySnapshot = $true
+            RequiresValidation  = $true
+            ValidationStatus    = 'CachedDiscovery'
+            CachedStatus        = [string]$entry.Status
+            WinRMHttpOpen       = [bool]$entry.WinRMHttpOpen
+            SMBOpen             = [bool]$entry.SMBOpen
+            DetectedOnly        = [bool]$entry.DetectedOnly
+        })
+    }
+    $sortedTargets = @(
+        $targets | Sort-Object `
+            @{ Expression = { if ($_.HasSavedHistory) { 0 } else { 1 } }; Ascending = $true }, `
+            @{ Expression = { if ($_.HasSavedHistory -and -not [string]::IsNullOrWhiteSpace($_.LastConnected)) { [datetime]$_.LastConnected } else { [datetime]::MinValue } }; Descending = $true }, `
+            @{ Expression = { $_.ComputerName }; Ascending = $true }
+    )
+    Add-DeviceCheckHistoryResolutionDiagnostic -Diagnostics $diagnostics -Stage 'TargetCatalog.Merge' -StartUtc $mergeStartUtc -Watch $mergeWatch -Status success -AttemptCount ($history.Count + $snapshotTargets.Count) -ResultCount $sortedTargets.Count
+
+    return [PSCustomObject]@{
+        PSTypeName          = 'WinRMDiscovery.TargetCatalog'
+        NetworkId           = $NetworkId
+        LoadedAtUtc         = [datetime]::UtcNow.ToString('o')
+        SnapshotCapturedAtUtc = $(if ($null -eq $snapshot) { '' } else { $snapshot.CapturedAtUtc })
+        SnapshotAgeSeconds  = $(if ($null -eq $snapshot) { $null } else { $snapshot.AgeSeconds })
+        SavedTargetCount    = $history.Count
+        SnapshotTargetCount = $snapshotTargets.Count
+        TargetCount         = $sortedTargets.Count
+        Targets             = $sortedTargets
+        Diagnostics         = $(if ($IncludeDiagnostics) { @($diagnostics) } else { @() })
+    }
 }
 
 function Set-WinRMDiscoveryStateRoot {
@@ -1462,19 +1904,25 @@ function Resolve-WinRMHistoryTargetAddress {
     param(
         [Parameter(Mandatory)][string]$ComputerName,
         [AllowEmptyString()][string]$LastIPAddress = '',
-        [AllowEmptyString()][string]$MACAddress = 'Unknown'
+        [AllowEmptyString()][string]$MACAddress = 'Unknown',
+        [switch]$IncludeDiagnostics
     )
 
-    return Resolve-HistoryTargetAddress `
+    $result = Resolve-HistoryTargetAddress `
         -ComputerName $ComputerName `
         -LastIPAddress $LastIPAddress `
         -MACAddress $MACAddress
+    if ($IncludeDiagnostics) {
+        return $result
+    }
+    return $result.ResolvedAddress
 }
 
 function Find-WinRMComputer {
     [CmdletBinding()]
     param(
         [string]$StateRoot = '',
+        [AllowEmptyString()][string]$NetworkId = '',
         [switch]$IncludeDiagnostics,
         [switch]$DiagnosticsInMemoryOnly
     )
@@ -1487,6 +1935,7 @@ function Find-WinRMComputer {
     $script:WinRMDiscoveryDiagnosticsInMemoryOnly = [bool]$DiagnosticsInMemoryOnly
     $ProgressPreference = 'SilentlyContinue'
     $raw = @(Get-DeviceCheckDiscoveredHosts)
+    $results = [System.Collections.Generic.List[object]]::new()
     foreach ($item in $raw) {
         $status = if ($item.WinRmOpen) {
             'WinRMReady'
@@ -1496,7 +1945,7 @@ function Find-WinRMComputer {
             'ComputerDetected'
         }
 
-        [PSCustomObject]@{
+        $results.Add([PSCustomObject]@{
             PSTypeName      = 'WinRMDiscovery.Computer'
             ComputerName    = $item.HostName
             IPAddress       = $item.IP
@@ -1509,8 +1958,13 @@ function Find-WinRMComputer {
             IP              = $item.IP
             MAC             = $item.MAC
             WinRmOpen       = [bool]$item.WinRmOpen
-        }
+        })
     }
+    if ([string]::IsNullOrWhiteSpace($NetworkId)) {
+        $NetworkId = (Get-CurrentNetworkIdentity).NetworkId
+    }
+    $null = Save-WinRMDiscoverySnapshot -NetworkId $NetworkId -Targets @($results)
+    return @($results)
 }
 
 function Get-WinRMDiscoveryDiagnostics {
@@ -1545,6 +1999,9 @@ Export-ModuleMember -Function @(
     'Set-WinRMDiscoveryStateRoot',
     'Get-WinRMConnectionHistory',
     'Add-WinRMConnectionHistoryEntry',
+    'Get-WinRMTargetCatalog',
+    'Get-WinRMDiscoverySnapshot',
+    'Save-WinRMDiscoverySnapshot',
     'Resolve-WinRMHistoryTargetAddress',
     'Test-WinRMDiscoveryIPv4',
     'ConvertTo-WinRMDiscoveryHostDisplayName'

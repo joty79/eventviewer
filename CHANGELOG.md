@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Synced canonical `WinRMDiscovery` 1.4.0. The TUI now rebuilds a local-only saved/recent target catalog, keeps explicit scan snapshots separate from successful-connection history, and resolves only the selected cached row before authentication.
 - Routed exact-target client `TrustedHosts` preparation through the pinned canonical `WinRMWorkshop` before credential lookup or authenticated session opening.
 - Removed the EventViewer-specific WinRM service and `TrustedHosts` mutation helpers, including acceptance of legacy wildcard `*` as ready state.
 - Routed network identity, LAN discovery, connection history and saved-target resolution through the canonical `WinRMDiscovery` public APIs.
@@ -17,6 +18,7 @@
 - Explicit UI/CLI target selection now authorizes only a verified exact hostname/IP entry; wildcard and comma-list targets are rejected, and legacy `*` is narrowed to the selected target.
 
 ### Fixed
+- Kept fresh discovery reachability separate from selected-target validation in the main menu: saved rows now show fresh online/offline evidence after a completed scan instead of remaining generically `not checked`.
 - Treated empty WinRM-deserialized dump-file objects as absent, preventing remote diagnostics without `MEMORY.DMP` or minidumps from failing on a missing `FullName` property.
 - Preserved unavailable Fast Startup, disk, PnP and event-query evidence as `unknown/unavailable` instead of silently converting it to disabled, empty or healthy state.
 - Reclassified PnP Code 22 as context-dependent disabled state, bounded `volmgr 161` to dump-failure evidence, and removed the hardcoded OptiPlex BIOS-version verdict from generic diagnostics.

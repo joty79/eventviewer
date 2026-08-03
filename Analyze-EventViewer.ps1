@@ -1229,10 +1229,12 @@ function Connect-RemotePcFlow {
 }
 
 function Invoke-LanScanFlow {
+    param([AllowEmptyString()][string]$NetworkId = '')
+
     Clear-TuiScreen
     Write-Host "Scanning local network for active WinRM hosts (port 5985)..." -ForegroundColor Yellow
     $hosts = @(
-        Find-WinRMComputer -IncludeDiagnostics -DiagnosticsInMemoryOnly |
+        Find-WinRMComputer -NetworkId $NetworkId -IncludeDiagnostics -DiagnosticsInMemoryOnly |
             Where-Object WinRMHttpOpen
     )
     
@@ -1326,9 +1328,14 @@ function Run-HistoryRemoteDiagFlow {
     Clear-TuiScreen
     Write-Host "Resolving saved target $($HistoryEntry.ComputerName)..." -ForegroundColor Gray
 
+    $lastIPAddress = if ($HistoryEntry.PSObject.Properties['LastIPAddress']) {
+        [string]$HistoryEntry.LastIPAddress
+    } else {
+        [string]$HistoryEntry.IPAddress
+    }
     $resolvedAddress = Resolve-WinRMHistoryTargetAddress `
         -ComputerName $HistoryEntry.ComputerName `
-        -LastIPAddress $HistoryEntry.LastIPAddress `
+        -LastIPAddress $lastIPAddress `
         -MACAddress $HistoryEntry.MACAddress
 
     if ([string]::IsNullOrWhiteSpace($resolvedAddress)) {
@@ -1339,9 +1346,17 @@ function Run-HistoryRemoteDiagFlow {
         return
     }
 
+    $defaultUser = if (
+        [string]::IsNullOrWhiteSpace([string]$HistoryEntry.UserName) -or
+        [string]$HistoryEntry.UserName -eq 'Unknown'
+    ) {
+        $UserName
+    } else {
+        [string]$HistoryEntry.UserName
+    }
     $accountSelection = Read-EventViewerRemoteAccountSelection `
         -TargetName $HistoryEntry.ComputerName `
-        -DefaultUser $HistoryEntry.UserName
+        -DefaultUser $defaultUser
     if ($null -eq $accountSelection) { return }
 
     Run-RemoteDiagFlow `
@@ -1355,6 +1370,25 @@ function Run-HistoryRemoteDiagFlow {
 
 function Clear-TuiScreen {
     [Console]::Write((Get-TuiForceClearSequence))
+}
+
+function Get-EventViewerCatalogTargetState {
+    param(
+        [Parameter(Mandatory)]$Entry,
+        [bool]$HasFreshSnapshot
+    )
+
+    if ([bool]$Entry.HasDiscoverySnapshot) {
+        if ([bool]$Entry.WinRMHttpOpen) { return 'online (fresh scan)' }
+        if ([bool]$Entry.DetectedOnly) { return 'computer detected (fresh scan, management closed)' }
+        if ([bool]$Entry.SMBOpen) { return 'online (fresh scan, WinRM disabled)' }
+        return 'detected (fresh scan)'
+    }
+    if ([bool]$Entry.HasSavedHistory) {
+        if ($HasFreshSnapshot) { return 'offline (fresh scan)' }
+        return 'not checked'
+    }
+    return 'cached discovery'
 }
 
 # Main TUI Loop Control Panel
@@ -1386,22 +1420,34 @@ function Invoke-EventViewerTui {
             $menuOptions.Add("Connect to Remote PC (IP/Name)")
             $actions.Add([PSCustomObject]@{ Type = 'ConnectNew'; Label = "Connect to Remote PC" })
             
-            # Connection History
-            $history = Get-WinRMConnectionHistory -NetworkId $networkId
-            if ($history -and @($history).Count -gt 0) {
-                $menuOptions.Add("--- Connection History ($networkName) ---")
+            # Local-only target catalog: successful connection history plus a
+            # short-lived snapshot from the last explicit discovery action.
+            $catalog = Get-WinRMTargetCatalog -NetworkId $networkId
+            $catalogTargets = @($catalog.Targets)
+            $hasFreshDiscoverySnapshot = -not [string]::IsNullOrWhiteSpace([string]$catalog.SnapshotCapturedAtUtc)
+            if ($catalogTargets.Count -gt 0) {
+                $menuOptions.Add("--- Saved & Recent Targets ($networkName) ---")
                 $actions.Add([PSCustomObject]@{ Type = 'Header'; Label = "Header" })
-                
-                foreach ($h in @($history)) {
-                    $historyAddress = if ([string]::IsNullOrWhiteSpace($h.LastIPAddress)) {
+
+                foreach ($h in $catalogTargets) {
+                    $historyAddress = if ([string]::IsNullOrWhiteSpace($h.IPAddress)) {
                         $h.ComputerName
                     } else {
-                        $h.LastIPAddress
+                        $h.IPAddress
+                    }
+                    $targetState = Get-EventViewerCatalogTargetState -Entry $h -HasFreshSnapshot $hasFreshDiscoverySnapshot
+                    $accountState = if (
+                        [string]::IsNullOrWhiteSpace([string]$h.UserName) -or
+                        [string]$h.UserName -eq 'Unknown'
+                    ) {
+                        'account: choose on connect'
+                    } else {
+                        "user: $($h.UserName)"
                     }
                     $displayName = if ($h.ComputerName -eq $historyAddress) {
-                        "  $historyAddress (user: $($h.UserName))"
+                        "  $historyAddress ($accountState, $targetState)"
                     } else {
-                        "  $($h.ComputerName) ($historyAddress) (user: $($h.UserName))"
+                        "  $($h.ComputerName) ($historyAddress) ($accountState, $targetState)"
                     }
                     $menuOptions.Add($displayName)
                     $actions.Add([PSCustomObject]@{ Type = 'HistoryEntry'; Data = $h; Label = $displayName })
@@ -1464,7 +1510,7 @@ function Invoke-EventViewerTui {
             
             $key = Read-ConsoleKey
             if ($key.KeyChar -eq [char]12) {
-                Invoke-LanScanFlow
+                Invoke-LanScanFlow -NetworkId $networkId
                 $script:RequestForceClear = $true
                 continue
             }
@@ -1488,7 +1534,7 @@ function Invoke-EventViewerTui {
                     $action = $actions[$selectedIndex]
                     switch ($action.Type) {
                         'Local' { Show-LocalDiagFlow }
-                        'Scan' { Invoke-LanScanFlow }
+                        'Scan' { Invoke-LanScanFlow -NetworkId $networkId }
                         'ConnectNew' { Connect-RemotePcFlow }
                         'HistoryEntry' {
                             Run-HistoryRemoteDiagFlow -HistoryEntry $action.Data

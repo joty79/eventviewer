@@ -1,6 +1,6 @@
 # PROJECT_RULES.md — EventViewer current contract
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-03
 
 ## 1. Purpose
 
@@ -37,7 +37,12 @@ there and synchronized into this repository.
 
 1. Accept an explicit `-ComputerName` or let the user invoke `Ctrl+L` discovery.
 2. `WinRMDiscovery` returns structured same-LAN computer evidence and owns
-   network-scoped successful-connection history. It does not authenticate.
+   network-scoped successful-connection history plus TTL-bound sanitized scan
+   snapshots. The TUI builds its first target list from the local-only catalog,
+   scans only after an explicit action, and validates only the selected cached
+   row. `ValidationStatus = NotChecked` is not an offline verdict: after a fresh
+   scan, saved rows display `HasDiscoverySnapshot`/cached port evidence
+   independently. Discovery does not authenticate.
 3. Explicit target selection authorizes `WinRMWorkshop` to prepare only that
    exact hostname/IP in client `TrustedHosts`, without a second prompt.
 4. The EventViewer adapter resolves an explicit credential, a saved DPAPI

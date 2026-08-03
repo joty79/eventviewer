@@ -1,6 +1,6 @@
 @{
     RootModule        = 'WinRMDiscovery.psm1'
-    ModuleVersion     = '1.2.0'
+    ModuleVersion     = '1.4.0'
     GUID              = '822b5f8e-c91c-4f87-9855-bec01e9a0f76'
     Author            = 'joty79'
     CompanyName       = 'Personal'
@@ -15,6 +15,9 @@
         'Set-WinRMDiscoveryStateRoot'
         'Get-WinRMConnectionHistory'
         'Add-WinRMConnectionHistoryEntry'
+        'Get-WinRMTargetCatalog'
+        'Get-WinRMDiscoverySnapshot'
+        'Save-WinRMDiscoverySnapshot'
         'Resolve-WinRMHistoryTargetAddress'
         'Test-WinRMDiscoveryIPv4'
         'ConvertTo-WinRMDiscoveryHostDisplayName'
