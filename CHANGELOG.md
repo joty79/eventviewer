@@ -19,6 +19,7 @@
 
 ### Fixed
 - Made the diagnostic-details report reflow ordinary text at the live viewport width, resize separators with the report box, and keep `E`/`F`/`Esc` actions visible without showing a false column bar for wrappable prose.
+- Removed zero-column Unicode format/control marks from display-only diagnostic lines before wrapping and padding, preventing EventLog 6008 `U+200E` marks from shifting individual right borders left.
 - Kept fresh discovery reachability separate from selected-target validation in the main menu: saved rows now show fresh online/offline evidence after a completed scan instead of remaining generically `not checked`.
 - Treated empty WinRM-deserialized dump-file objects as absent, preventing remote diagnostics without `MEMORY.DMP` or minidumps from failing on a missing `FullName` property.
 - Preserved unavailable Fast Startup, disk, PnP and event-query evidence as `unknown/unavailable` instead of silently converting it to disabled, empty or healthy state.

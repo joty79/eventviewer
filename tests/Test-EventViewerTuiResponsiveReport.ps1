@@ -47,6 +47,7 @@ function Get-EventViewerFunctionAst {
 
 . ([ScriptBlock]::Create((Get-EventViewerFunctionAst -Name 'Get-EventViewerDiagReportFrame').Extent.Text))
 
+$directionalMark = [string][char]0x200E
 $script:FixtureLines = @(
     '======================================================================'
     '            EVENTVIEWER SYSTEM DIAGNOSTICS REPORT'
@@ -55,6 +56,7 @@ $script:FixtureLines = @(
     '  BIOS Version: LCCN27WW (Release: 09/23/2025 03:00:00)'
     '  LONG-TOKEN-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     '  Fast Startup (Hiberboot): REGISTRY PREFERENCE DISABLED'
+    "  EventLog 6008 time ${directionalMark}3:14:29${directionalMark} PM on ${directionalMark}7/26/2026"
     '  E export, F disable preference, and Esc back must stay discoverable.'
 )
 
@@ -135,6 +137,9 @@ foreach ($width in $widths) {
         if ($displayLine.Length -gt ($width - 4)) {
             throw "Responsive report line exceeded its $($width - 4)-column content width: '$displayLine'"
         }
+        if ($displayLine -match '\p{Cf}|\p{Cc}') {
+            throw "A zero-column Unicode format/control character survived display normalization: '$displayLine'"
+        }
     }
 
     $boxRows = @(Get-ReportBoxRows -Lines $plainLines)
@@ -162,7 +167,7 @@ foreach ($width in $widths) {
 
     $allDisplayText = Get-WhitespaceFreeText -Text ($view.DisplayLines -join '')
     foreach ($sourceLine in $script:FixtureLines | Where-Object { $_ -notmatch '^\s*=+\s*$' }) {
-        $sourceText = Get-WhitespaceFreeText -Text $sourceLine
+        $sourceText = Get-WhitespaceFreeText -Text (ConvertTo-UiSafeSingleLineText -Text $sourceLine)
         if ($sourceText.Length -gt 0 -and -not $allDisplayText.Contains($sourceText)) {
             throw "Responsive wrapping lost source data at width ${width}: '$sourceLine'"
         }

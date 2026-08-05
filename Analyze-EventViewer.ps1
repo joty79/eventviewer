@@ -1011,7 +1011,7 @@ function Get-EventViewerDiagReportFrame {
     $displayLines = [System.Collections.Generic.List[object]]::new()
     $innerWidth = [Math]::Max(1, $Width - 4)
     foreach ($line in $rawLines) {
-        $cleanLine = if ($null -eq $line) { '' } else { ([string]$line).Replace("`t", '    ') }
+        $cleanLine = if ($null -eq $line) { '' } else { ConvertTo-UiSafeSingleLineText -Text ([string]$line) }
         $processedLines.Add($cleanLine)
         $wrappedLines = if ($cleanLine -match '^\s*=+\s*$') {
             @(('=' * $innerWidth))
