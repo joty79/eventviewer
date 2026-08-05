@@ -993,93 +993,181 @@ function Confirm-FastStartupDisableAction {
     }
 }
 
-# TUI Rendering Scrollable Screen
+# TUI Rendering Scrollable Screen Helper
+function Get-EventViewerDiagReportFrame {
+    param(
+        [string]$Title = 'EventViewer Diagnostics Report',
+        $diagData,
+        [int]$Width = (Get-UiWidth),
+        [int]$Height = 24,
+        [int]$ScrollOffset = 0,
+        [int]$HorizontalOffset = 0
+    )
+
+    $Width = [Math]::Max(1, $Width)
+    $Height = [Math]::Max(1, $Height)
+
+    $rawLines = @(Get-FormattedDiagLines -diagData $diagData)
+    $processedLines = [System.Collections.Generic.List[string]]::new()
+    $maximumLineLength = 0
+    foreach ($line in $rawLines) {
+        $cleanLine = if ($null -eq $line) { '' } else { ([string]$line).Replace("`t", '    ') }
+        $processedLines.Add($cleanLine)
+        $maximumLineLength = [Math]::Max($maximumLineLength, $cleanLine.Length)
+    }
+
+    $innerWidth = [Math]::Max(1, $Width - 4)
+    $maximumHorizontalOffset = [Math]::Max(0, $maximumLineLength - $innerWidth)
+    $HorizontalOffset = [Math]::Max(0, [Math]::Min($HorizontalOffset, $maximumHorizontalOffset))
+
+    $panRowCount = if ($maximumHorizontalOffset -gt 0) { 1 } else { 0 }
+    $maxVisibleLines = [Math]::Max(1, $Height - 11 - $panRowCount)
+    $maximumScrollOffset = [Math]::Max(0, $processedLines.Count - $maxVisibleLines)
+    $ScrollOffset = [Math]::Max(0, [Math]::Min($ScrollOffset, $maximumScrollOffset))
+
+    $subtitle = if ($Width -ge 90) {
+        'Up/Down/PgUp/PgDn scroll | Left/Right pan | E export | F disable preference | Esc back'
+    } elseif ($Width -ge 60) {
+        'Up/Down scroll | Left/Right pan | E export | F pref | Esc back'
+    } else {
+        'E export | F pref | Esc back'
+    }
+
+    $frame = New-UiFrame
+    Add-UiFrameBanner -Frame $frame -Title $Title -Subtitle $subtitle -Width $Width
+
+    $borderH = (Get-UiGlyph -Name BoxH) * ($innerWidth + 2)
+    Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxTopLeft)$borderH$(Get-UiGlyph -Name BoxTopRight)$($_C.Reset)$($_C.EraseLn)"
+
+    $endIndex = [Math]::Min($ScrollOffset + $maxVisibleLines - 1, $processedLines.Count - 1)
+    if ($endIndex -ge $ScrollOffset) {
+        for ($i = $ScrollOffset; $i -le $endIndex; $i++) {
+            $rawLineText = $processedLines[$i]
+            $globalCanvasLine = $rawLineText.PadRight($maximumLineLength)
+            $visibleSlice = Get-UiHorizontalSlice -Text $globalCanvasLine -Offset $HorizontalOffset -Width $innerWidth
+            $paddedText = $visibleSlice.PadRight($innerWidth)
+
+            # Apply custom colors after slicing while classifying the original semantic line.
+            $coloredText = $paddedText
+            if ($rawLineText -match '^===') {
+                $coloredText = "$($_C.Info)$($_C.Bold)$paddedText$($_C.Reset)"
+            } elseif ($rawLineText -match '^---') {
+                $coloredText = "$($_C.Dim)$paddedText$($_C.Reset)"
+            } elseif ($rawLineText -match '⚠️🚨 WARNING|volmgr Event ID 161') {
+                $coloredText = "$($_C.Fail)$($_C.Bold)$paddedText$($_C.Reset)"
+            } elseif ($rawLineText -match 'conclusion & recommendations') {
+                $coloredText = "$($_C.Gold)$($_C.Bold)$paddedText$($_C.Reset)"
+            } else {
+                $coloredText = $coloredText -replace '\bENABLED\b', "$($_C.Fail)ENABLED$($_C.Reset)"
+                $coloredText = $coloredText -replace '\bDISABLED\b', "$($_C.OK)DISABLED$($_C.Reset)"
+                $coloredText = $coloredText -replace '💡 ANALYSIS:', "$($_C.Gold)💡 ANALYSIS:$($_C.Reset)"
+            }
+
+            Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset) $coloredText $($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset)$($_C.EraseLn)"
+        }
+    }
+
+    $printedCount = if ($endIndex -ge $ScrollOffset) { $endIndex - $ScrollOffset + 1 } else { 0 }
+    for ($i = $printedCount; $i -lt $maxVisibleLines; $i++) {
+        $emptyPad = ' ' * $innerWidth
+        Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset) $emptyPad $($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset)$($_C.EraseLn)"
+    }
+
+    Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxBottomLeft)$borderH$(Get-UiGlyph -Name BoxBottomRight)$($_C.Reset)$($_C.EraseLn)"
+
+    if ($maximumHorizontalOffset -gt 0) {
+        $indicatorWidth = [Math]::Max(1, $Width - 2)
+        $panIndicator = New-UiHorizontalPanIndicator `
+            -Offset $HorizontalOffset `
+            -MaximumOffset $maximumHorizontalOffset `
+            -ViewportWidth $innerWidth `
+            -Width $indicatorWidth `
+            -Label 'diagnostic pan'
+        Add-UiFrameLine -Frame $frame -Text "$($_C.H2)  $panIndicator$($_C.Reset)$($_C.EraseLn)"
+    }
+
+    Add-UiFrameLine -Frame $frame
+
+    $segments = [System.Collections.Generic.List[object]]::new()
+    $navigationGlyphs = "$(Get-UiGlyph -Name Up)$(Get-UiGlyph -Name Down)"
+    if ($maximumHorizontalOffset -gt 0) {
+        $navigationGlyphs += "$(Get-UiGlyph -Name Left)$(Get-UiGlyph -Name Right)"
+    }
+
+    if ($Width -ge 90) {
+        $scrollInfo = "Line $($ScrollOffset + 1) of $($processedLines.Count)"
+        $segments.Add((New-UiShortcutSegment -Text $navigationGlyphs -Color $_C.White))
+        $segments.Add((New-UiShortcutSegment -Text " Scroll/Pan ($scrollInfo)   " -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text 'E' -Color $_C.Gold))
+        $segments.Add((New-UiShortcutSegment -Text ' = export   ' -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text 'F' -Color $_C.Info))
+        $segments.Add((New-UiShortcutSegment -Text ' = disable preference   ' -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text 'Esc' -Color $_C.Fail))
+        $segments.Add((New-UiShortcutSegment -Text ' = back' -Color $_C.Dim))
+    } else {
+        # Required actions come first so they remain discoverable when the footer is truncated.
+        $segments.Add((New-UiShortcutSegment -Text 'E' -Color $_C.Gold))
+        $segments.Add((New-UiShortcutSegment -Text ' export ' -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text 'F' -Color $_C.Info))
+        $segments.Add((New-UiShortcutSegment -Text ' pref ' -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text 'Esc' -Color $_C.Fail))
+        $segments.Add((New-UiShortcutSegment -Text ' back ' -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text $navigationGlyphs -Color $_C.White))
+        $segments.Add((New-UiShortcutSegment -Text ' nav' -Color $_C.Dim))
+    }
+    Add-UiFrameShortcutSegments -Frame $frame -Segments @($segments) -Width $Width
+
+    return [pscustomobject]@{
+        Frame                   = $frame
+        RawLines                = @($processedLines)
+        ScrollOffset            = $ScrollOffset
+        MaximumScrollOffset     = $maximumScrollOffset
+        HorizontalOffset        = $HorizontalOffset
+        MaximumHorizontalOffset = $maximumHorizontalOffset
+        MaxVisibleLines         = $maxVisibleLines
+        Width                   = $Width
+        Height                  = $Height
+    }
+}
+
 function Show-ScrollableDiagText {
     param(
         [string]$Title,
         $diagData
     )
-    
+
     $scrollOffset = 0
+    $horizontalOffset = 0
     $exitScroll = $false
-    
+
     try {
         while (-not $exitScroll) {
             Lock-ViewportToWindow
             $width = Get-UiWidth
             $height = $Host.UI.RawUI.WindowSize.Height
-            $maxVisibleLines = [Math]::Max(1, $height - 11)
-            
-            $rawLines = Get-FormattedDiagLines -diagData $diagData
-            
-            $frame = New-UiFrame
-            Add-UiFrameBanner -Frame $frame -Title $Title -Subtitle "Up/Down/PgUp/PgDn scroll. E export. F disable registry preference. Esc back." -Width $width
-            
-            $innerWidth = $width - 4
-            $borderH = (Get-UiGlyph -Name BoxH) * $innerWidth
-            Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxTopLeft)$borderH$(Get-UiGlyph -Name BoxTopRight)$($_C.Reset)$($_C.EraseLn)"
-            
-            $endIndex = [Math]::Min($scrollOffset + $maxVisibleLines - 1, $rawLines.Count - 1)
-            for ($i = $scrollOffset; $i -le $endIndex; $i++) {
-                $lineText = $rawLines[$i].Replace("`t", "    ")
-                
-                if ($lineText.Length -gt $innerWidth) {
-                    $lineText = $lineText.Substring(0, $innerWidth)
-                }
-                
-                $padWidth = [Math]::Max(0, $innerWidth - $lineText.Length)
-                $paddedText = $lineText + (' ' * $padWidth)
-                
-                # Apply custom colors
-                $coloredText = $paddedText
-                if ($paddedText -match '^===') {
-                    $coloredText = "$($_C.Info)$($_C.Bold)$paddedText$($_C.Reset)"
-                } elseif ($paddedText -match '^---') {
-                    $coloredText = "$($_C.Dim)$paddedText$($_C.Reset)"
-                } elseif ($paddedText -match '⚠️🚨 WARNING|volmgr Event ID 161') {
-                    $coloredText = "$($_C.Fail)$($_C.Bold)$paddedText$($_C.Reset)"
-                } elseif ($paddedText -match 'conclusion & recommendations') {
-                    $coloredText = "$($_C.Gold)$($_C.Bold)$paddedText$($_C.Reset)"
-                } else {
-                    $coloredText = $coloredText -replace '\bENABLED\b', "$($_C.Fail)ENABLED$($_C.Reset)"
-                    $coloredText = $coloredText -replace '\bDISABLED\b', "$($_C.OK)DISABLED$($_C.Reset)"
-                    $coloredText = $coloredText -replace '💡 ANALYSIS:', "$($_C.Gold)💡 ANALYSIS:$($_C.Reset)"
-                }
-                
-                Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset) $coloredText $($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset)$($_C.EraseLn)"
-            }
-            
-            $printedCount = $endIndex - $scrollOffset + 1
-            if ($printedCount -lt $maxVisibleLines) {
-                for ($i = $printedCount; $i -lt $maxVisibleLines; $i++) {
-                    $emptyPad = ' ' * $innerWidth
-                    Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset) $emptyPad $($_C.H2)$(Get-UiGlyph -Name BoxV)$($_C.Reset)$($_C.EraseLn)"
-                }
-            }
-            
-            Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxBottomLeft)$borderH$(Get-UiGlyph -Name BoxBottomRight)$($_C.Reset)$($_C.EraseLn)"
-            Add-UiFrameLine -Frame $frame
-            
-            $scrollInfo = "Line $($scrollOffset + 1) of $($rawLines.Count)"
-            $segments = @(
-                New-UiShortcutSegment -Text "$(Get-UiGlyph -Name Up)$(Get-UiGlyph -Name Down)" -Color $_C.White
-                New-UiShortcutSegment -Text " Scroll ($scrollInfo)   " -Color $_C.Dim
-                New-UiShortcutSegment -Text "E" -Color $_C.Gold
-                New-UiShortcutSegment -Text " = export   " -Color $_C.Dim
-                New-UiShortcutSegment -Text "F" -Color $_C.Info
-                New-UiShortcutSegment -Text " = disable preference   " -Color $_C.Dim
-                New-UiShortcutSegment -Text "Esc" -Color $_C.Fail
-                New-UiShortcutSegment -Text " = back" -Color $_C.Dim
-            )
-            Add-UiFrameShortcutSegments -Frame $frame -Segments $segments -Width $width
-            Write-UiFrame -Frame $frame
-            
+
+            $view = Get-EventViewerDiagReportFrame `
+                -Title $Title `
+                -diagData $diagData `
+                -Width $width `
+                -Height $height `
+                -ScrollOffset $scrollOffset `
+                -HorizontalOffset $horizontalOffset
+
+            $scrollOffset = $view.ScrollOffset
+            $horizontalOffset = $view.HorizontalOffset
+            Write-UiFrame -Frame $view.Frame
+
             $key = Read-ConsoleKey
             switch ($key.Key) {
                 'UpArrow' { $scrollOffset = [Math]::Max(0, $scrollOffset - 1) }
-                'DownArrow' { $scrollOffset = [Math]::Min([Math]::Max(0, $rawLines.Count - $maxVisibleLines), $scrollOffset + 1) }
-                'PageUp' { $scrollOffset = [Math]::Max(0, $scrollOffset - $maxVisibleLines) }
-                'PageDown' { $scrollOffset = [Math]::Min([Math]::Max(0, $rawLines.Count - $maxVisibleLines), $scrollOffset + $maxVisibleLines) }
+                'DownArrow' { $scrollOffset = [Math]::Min($view.MaximumScrollOffset, $scrollOffset + 1) }
+                'LeftArrow' { $horizontalOffset = [Math]::Max(0, $horizontalOffset - 4) }
+                'RightArrow' { $horizontalOffset = [Math]::Min($view.MaximumHorizontalOffset, $horizontalOffset + 4) }
+                'PageUp' { $scrollOffset = [Math]::Max(0, $scrollOffset - $view.MaxVisibleLines) }
+                'PageDown' { $scrollOffset = [Math]::Min($view.MaximumScrollOffset, $scrollOffset + $view.MaxVisibleLines) }
+                'Home' { $scrollOffset = 0; $horizontalOffset = 0 }
+                'End' { $scrollOffset = $view.MaximumScrollOffset }
                 'E' {
                     # Export action
                     Clear-TuiScreen

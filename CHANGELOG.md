@@ -18,6 +18,7 @@
 - Explicit UI/CLI target selection now authorizes only a verified exact hostname/IP entry; wildcard and comma-list targets are rejected, and legacy `*` is narrowed to the selected target.
 
 ### Fixed
+- Made the diagnostic-details report box width-consistent and added bounded horizontal panning with one shared column offset, responsive guidance, and `E`/`F`/`Esc` actions that remain visible at narrow terminal widths.
 - Kept fresh discovery reachability separate from selected-target validation in the main menu: saved rows now show fresh online/offline evidence after a completed scan instead of remaining generically `not checked`.
 - Treated empty WinRM-deserialized dump-file objects as absent, preventing remote diagnostics without `MEMORY.DMP` or minidumps from failing on a missing `FullName` property.
 - Preserved unavailable Fast Startup, disk, PnP and event-query evidence as `unknown/unavailable` instead of silently converting it to disabled, empty or healthy state.
@@ -27,6 +28,7 @@
 - Treated an absent normal-boot `SafeBoot\Option` key as expected state under `StrictMode`, and made headless diagnostic failures return a nonzero process result instead of silently exiting successfully.
 
 ### Tests
+- Added production-renderer coverage for the `120 -> 101 -> 100 -> 99 -> 98 -> 80 -> 60 -> 120` resize sequence, exact printable box widths, shared pan semantics, height budgeting, and narrow-footer action visibility; completed a local interactive PTY smoke without Registry mutation.
 - Added offline consumer coverage for idempotent preparation, preservation of existing entries, wildcard narrowing, invalid-target rejection, failure-before-connection on readback mismatch, and empty remote dump-object formatting.
 - Added a focused ownership guard that rejects reintroduction of EventViewer-specific discovery/history implementations.
 - Added an agent-contract guard for the single CLI entry point, retired paths, archive hashes and ad-hoc `New-PSSession` regressions.

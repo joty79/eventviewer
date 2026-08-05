@@ -120,7 +120,7 @@ $tuiContractPatterns = [ordered]@{
     'blank-password TUI choice' = 'B\s+= intentionally blank password'
     'credential/profile TUI choice' = 'saved DPAPI credential or secure credential prompt'
     'blank-password state preserved for action' = 'WinRMBlankPassword'
-    'height-bounded diagnostic rows' = '\$maxVisibleLines = \[Math\]::Max\(1, \$height - 11\)'
+    'height-bounded diagnostic rows' = '\$maxVisibleLines = \[Math\]::Max\(1, \$Height - 11 - \$panRowCount\)'
     'height-bounded discovery rows' = '\$maxVisible = \[Math\]::Max\(1, \$height - 10\)'
     'height-bounded main-menu rows' = '\$maxVisibleMenuItems = \[Math\]::Max\(1, \$height - 10\)'
     'actual Ctrl+L character handling' = '\$key\.KeyChar -eq \[char\]12'
