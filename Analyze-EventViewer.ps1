@@ -1000,8 +1000,7 @@ function Get-EventViewerDiagReportFrame {
         $diagData,
         [int]$Width = (Get-UiWidth),
         [int]$Height = 24,
-        [int]$ScrollOffset = 0,
-        [int]$HorizontalOffset = 0
+        [int]$ScrollOffset = 0
     )
 
     $Width = [Math]::Max(1, $Width)
@@ -1009,26 +1008,33 @@ function Get-EventViewerDiagReportFrame {
 
     $rawLines = @(Get-FormattedDiagLines -diagData $diagData)
     $processedLines = [System.Collections.Generic.List[string]]::new()
-    $maximumLineLength = 0
+    $displayLines = [System.Collections.Generic.List[object]]::new()
+    $innerWidth = [Math]::Max(1, $Width - 4)
     foreach ($line in $rawLines) {
         $cleanLine = if ($null -eq $line) { '' } else { ([string]$line).Replace("`t", '    ') }
         $processedLines.Add($cleanLine)
-        $maximumLineLength = [Math]::Max($maximumLineLength, $cleanLine.Length)
+        $wrappedLines = if ($cleanLine -match '^\s*=+\s*$') {
+            @(('=' * $innerWidth))
+        } else {
+            @(Split-UiWrappedText -Text $cleanLine -Width $innerWidth)
+        }
+
+        foreach ($wrappedLine in $wrappedLines) {
+            $displayLines.Add([pscustomobject]@{
+                    PlainText  = $wrappedLine
+                    SourceText = $cleanLine
+                })
+        }
     }
 
-    $innerWidth = [Math]::Max(1, $Width - 4)
-    $maximumHorizontalOffset = [Math]::Max(0, $maximumLineLength - $innerWidth)
-    $HorizontalOffset = [Math]::Max(0, [Math]::Min($HorizontalOffset, $maximumHorizontalOffset))
-
-    $panRowCount = if ($maximumHorizontalOffset -gt 0) { 1 } else { 0 }
-    $maxVisibleLines = [Math]::Max(1, $Height - 11 - $panRowCount)
-    $maximumScrollOffset = [Math]::Max(0, $processedLines.Count - $maxVisibleLines)
+    $maxVisibleLines = [Math]::Max(1, $Height - 11)
+    $maximumScrollOffset = [Math]::Max(0, $displayLines.Count - $maxVisibleLines)
     $ScrollOffset = [Math]::Max(0, [Math]::Min($ScrollOffset, $maximumScrollOffset))
 
     $subtitle = if ($Width -ge 90) {
-        'Up/Down/PgUp/PgDn scroll | Left/Right pan | E export | F disable preference | Esc back'
+        'Up/Down/PgUp/PgDn scroll | E export | F disable preference | Esc back'
     } elseif ($Width -ge 60) {
-        'Up/Down scroll | Left/Right pan | E export | F pref | Esc back'
+        'Up/Down scroll | E export | F pref | Esc back'
     } else {
         'E export | F pref | Esc back'
     }
@@ -1039,15 +1045,14 @@ function Get-EventViewerDiagReportFrame {
     $borderH = (Get-UiGlyph -Name BoxH) * ($innerWidth + 2)
     Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxTopLeft)$borderH$(Get-UiGlyph -Name BoxTopRight)$($_C.Reset)$($_C.EraseLn)"
 
-    $endIndex = [Math]::Min($ScrollOffset + $maxVisibleLines - 1, $processedLines.Count - 1)
+    $endIndex = [Math]::Min($ScrollOffset + $maxVisibleLines - 1, $displayLines.Count - 1)
     if ($endIndex -ge $ScrollOffset) {
         for ($i = $ScrollOffset; $i -le $endIndex; $i++) {
-            $rawLineText = $processedLines[$i]
-            $globalCanvasLine = $rawLineText.PadRight($maximumLineLength)
-            $visibleSlice = Get-UiHorizontalSlice -Text $globalCanvasLine -Offset $HorizontalOffset -Width $innerWidth
-            $paddedText = $visibleSlice.PadRight($innerWidth)
+            $displayLine = $displayLines[$i]
+            $rawLineText = $displayLine.SourceText
+            $paddedText = ([string]$displayLine.PlainText).PadRight($innerWidth)
 
-            # Apply custom colors after slicing while classifying the original semantic line.
+            # Color the responsive fragment while classifying its original semantic line.
             $coloredText = $paddedText
             if ($rawLineText -match '^===') {
                 $coloredText = "$($_C.Info)$($_C.Bold)$paddedText$($_C.Reset)"
@@ -1075,29 +1080,15 @@ function Get-EventViewerDiagReportFrame {
 
     Add-UiFrameLine -Frame $frame -Text "$($_C.H2)$(Get-UiGlyph -Name BoxBottomLeft)$borderH$(Get-UiGlyph -Name BoxBottomRight)$($_C.Reset)$($_C.EraseLn)"
 
-    if ($maximumHorizontalOffset -gt 0) {
-        $indicatorWidth = [Math]::Max(1, $Width - 2)
-        $panIndicator = New-UiHorizontalPanIndicator `
-            -Offset $HorizontalOffset `
-            -MaximumOffset $maximumHorizontalOffset `
-            -ViewportWidth $innerWidth `
-            -Width $indicatorWidth `
-            -Label 'diagnostic pan'
-        Add-UiFrameLine -Frame $frame -Text "$($_C.H2)  $panIndicator$($_C.Reset)$($_C.EraseLn)"
-    }
-
     Add-UiFrameLine -Frame $frame
 
     $segments = [System.Collections.Generic.List[object]]::new()
     $navigationGlyphs = "$(Get-UiGlyph -Name Up)$(Get-UiGlyph -Name Down)"
-    if ($maximumHorizontalOffset -gt 0) {
-        $navigationGlyphs += "$(Get-UiGlyph -Name Left)$(Get-UiGlyph -Name Right)"
-    }
 
     if ($Width -ge 90) {
-        $scrollInfo = "Line $($ScrollOffset + 1) of $($processedLines.Count)"
+        $scrollInfo = "Line $($ScrollOffset + 1) of $($displayLines.Count)"
         $segments.Add((New-UiShortcutSegment -Text $navigationGlyphs -Color $_C.White))
-        $segments.Add((New-UiShortcutSegment -Text " Scroll/Pan ($scrollInfo)   " -Color $_C.Dim))
+        $segments.Add((New-UiShortcutSegment -Text " Scroll ($scrollInfo)   " -Color $_C.Dim))
         $segments.Add((New-UiShortcutSegment -Text 'E' -Color $_C.Gold))
         $segments.Add((New-UiShortcutSegment -Text ' = export   ' -Color $_C.Dim))
         $segments.Add((New-UiShortcutSegment -Text 'F' -Color $_C.Info))
@@ -1120,10 +1111,9 @@ function Get-EventViewerDiagReportFrame {
     return [pscustomobject]@{
         Frame                   = $frame
         RawLines                = @($processedLines)
+        DisplayLines            = @($displayLines | ForEach-Object PlainText)
         ScrollOffset            = $ScrollOffset
         MaximumScrollOffset     = $maximumScrollOffset
-        HorizontalOffset        = $HorizontalOffset
-        MaximumHorizontalOffset = $maximumHorizontalOffset
         MaxVisibleLines         = $maxVisibleLines
         Width                   = $Width
         Height                  = $Height
@@ -1137,7 +1127,6 @@ function Show-ScrollableDiagText {
     )
 
     $scrollOffset = 0
-    $horizontalOffset = 0
     $exitScroll = $false
 
     try {
@@ -1151,22 +1140,18 @@ function Show-ScrollableDiagText {
                 -diagData $diagData `
                 -Width $width `
                 -Height $height `
-                -ScrollOffset $scrollOffset `
-                -HorizontalOffset $horizontalOffset
+                -ScrollOffset $scrollOffset
 
             $scrollOffset = $view.ScrollOffset
-            $horizontalOffset = $view.HorizontalOffset
             Write-UiFrame -Frame $view.Frame
 
             $key = Read-ConsoleKey
             switch ($key.Key) {
                 'UpArrow' { $scrollOffset = [Math]::Max(0, $scrollOffset - 1) }
                 'DownArrow' { $scrollOffset = [Math]::Min($view.MaximumScrollOffset, $scrollOffset + 1) }
-                'LeftArrow' { $horizontalOffset = [Math]::Max(0, $horizontalOffset - 4) }
-                'RightArrow' { $horizontalOffset = [Math]::Min($view.MaximumHorizontalOffset, $horizontalOffset + 4) }
                 'PageUp' { $scrollOffset = [Math]::Max(0, $scrollOffset - $view.MaxVisibleLines) }
                 'PageDown' { $scrollOffset = [Math]::Min($view.MaximumScrollOffset, $scrollOffset + $view.MaxVisibleLines) }
-                'Home' { $scrollOffset = 0; $horizontalOffset = 0 }
+                'Home' { $scrollOffset = 0 }
                 'End' { $scrollOffset = $view.MaximumScrollOffset }
                 'E' {
                     # Export action

@@ -48,11 +48,14 @@ function Get-EventViewerFunctionAst {
 . ([ScriptBlock]::Create((Get-EventViewerFunctionAst -Name 'Get-EventViewerDiagReportFrame').Extent.Text))
 
 $script:FixtureLines = @(
-    ('0123456789' * 14)
-    'SHORT-LINE'
-    'EVIDENCE: a medium diagnostic line that is intentionally wider than a narrow viewport.'
-    'F disable preference must stay discoverable'
-    'Esc back must stay discoverable'
+    '======================================================================'
+    '            EVENTVIEWER SYSTEM DIAGNOSTICS REPORT'
+    ''
+    '  This diagnostic observation must reflow at word boundaries without losing any evidence when the terminal becomes narrow.'
+    '  BIOS Version: LCCN27WW (Release: 09/23/2025 03:00:00)'
+    '  LONG-TOKEN-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    '  Fast Startup (Hiberboot): REGISTRY PREFERENCE DISABLED'
+    '  E export, F disable preference, and Esc back must stay discoverable.'
 )
 
 function Get-FormattedDiagLines {
@@ -102,17 +105,23 @@ function Get-ReportBoxRows {
     return @($rows)
 }
 
+function Get-WhitespaceFreeText {
+    param([AllowEmptyString()][string]$Text = '')
+    return $Text -replace '\s+', ''
+}
+
 $fixture = [pscustomobject]@{}
 $widths = @(120, 101, 100, 99, 98, 80, 60, 50, 35)
+$displayCounts = @{}
 foreach ($width in $widths) {
     $view = Get-EventViewerDiagReportFrame `
-        -Title 'Gold resize test' `
+        -Title 'Responsive resize test' `
         -diagData $fixture `
         -Width $width `
         -Height 24 `
-        -ScrollOffset 0 `
-        -HorizontalOffset 0
+        -ScrollOffset 0
     $plainLines = @(Get-PlainFrameLines -Frame $view.Frame.ToString())
+    $displayCounts[$width] = $view.DisplayLines.Count
 
     if ($plainLines.Count -gt 23) {
         throw "Frame used $($plainLines.Count) rows at width $width; expected at most 23."
@@ -120,6 +129,11 @@ foreach ($width in $widths) {
     foreach ($line in $plainLines) {
         if ($line.Length -gt $width) {
             throw "Frame row width $($line.Length) exceeded $width columns: '$line'"
+        }
+    }
+    foreach ($displayLine in $view.DisplayLines) {
+        if ($displayLine.Length -gt ($width - 4)) {
+            throw "Responsive report line exceeded its $($width - 4)-column content width: '$displayLine'"
         }
     }
 
@@ -135,63 +149,43 @@ foreach ($width in $widths) {
             throw "Footer key '$requiredKey' was not discoverable at width ${width}: '$footer'"
         }
     }
+
+    $renderedText = $plainLines -join "`n"
+    if ($renderedText -match 'diagnostic pan|columns|Left/Right') {
+        throw "Wrappable prose produced a false horizontal-pan affordance at width $width."
+    }
+
+    $expectedSeparator = '=' * ($width - 4)
+    if ($view.DisplayLines -cnotcontains $expectedSeparator) {
+        throw "The report separator did not resize to the $($width - 4)-column content width."
+    }
+
+    $allDisplayText = Get-WhitespaceFreeText -Text ($view.DisplayLines -join '')
+    foreach ($sourceLine in $script:FixtureLines | Where-Object { $_ -notmatch '^\s*=+\s*$' }) {
+        $sourceText = Get-WhitespaceFreeText -Text $sourceLine
+        if ($sourceText.Length -gt 0 -and -not $allDisplayText.Contains($sourceText)) {
+            throw "Responsive wrapping lost source data at width ${width}: '$sourceLine'"
+        }
+    }
 }
 
-$narrowView = Get-EventViewerDiagReportFrame `
-    -Title 'Gold pan test' `
-    -diagData $fixture `
-    -Width 50 `
-    -Height 24 `
-    -ScrollOffset 0 `
-    -HorizontalOffset ([int]::MaxValue)
-if ($narrowView.HorizontalOffset -ne $narrowView.MaximumHorizontalOffset) {
-    throw 'Horizontal offset was not clamped to the current maximum after resize/pan.'
-}
-
-$narrowLines = @(Get-PlainFrameLines -Frame $narrowView.Frame.ToString())
-$narrowBoxRows = @(Get-ReportBoxRows -Lines $narrowLines)
-if ($narrowBoxRows[2] -match 'SHORT-LINE') {
-    throw 'Short lines used an independent clamped offset instead of the shared horizontal viewport.'
+if ($displayCounts[35] -le $displayCounts[120]) {
+    throw 'Narrowing the viewport did not reflow prose onto additional display lines.'
 }
 
 $resizeWidths = @(120, 101, 100, 99, 98, 80, 60, 120)
-$horizontalOffset = 25
 $scrollOffset = 999
 foreach ($width in $resizeWidths) {
     $view = Get-EventViewerDiagReportFrame `
-        -Title 'Gold resize state test' `
+        -Title 'Responsive state test' `
         -diagData $fixture `
         -Width $width `
         -Height 24 `
-        -ScrollOffset $scrollOffset `
-        -HorizontalOffset $horizontalOffset
-    $horizontalOffset = $view.HorizontalOffset
+        -ScrollOffset $scrollOffset
     $scrollOffset = $view.ScrollOffset
-
-    if ($horizontalOffset -lt 0 -or $horizontalOffset -gt $view.MaximumHorizontalOffset) {
-        throw "Horizontal offset escaped its bounds at width $width."
-    }
     if ($scrollOffset -lt 0 -or $scrollOffset -gt $view.MaximumScrollOffset) {
-        throw "Scroll offset escaped its bounds at width $width."
+        throw "Vertical offset escaped its reflowed bounds at width $width."
     }
 }
 
-$wideView = Get-EventViewerDiagReportFrame `
-    -Title 'Gold no-pan test' `
-    -diagData $fixture `
-    -Width 200 `
-    -Height 24 `
-    -ScrollOffset 0 `
-    -HorizontalOffset 999
-if ($wideView.MaximumHorizontalOffset -ne 0 -or $wideView.HorizontalOffset -ne 0) {
-    throw 'Pan state was not removed when the report fit the wider viewport.'
-}
-$wideLines = @(Get-PlainFrameLines -Frame $wideView.Frame.ToString())
-if (($wideLines -join "`n") -match 'diagnostic pan') {
-    throw 'Pan indicator remained visible without horizontal overflow.'
-}
-if ($wideLines.Count -gt 23) {
-    throw 'Frame height exceeded its budget when the pan indicator disappeared.'
-}
-
-Write-Host 'PASS: EventViewer production renderer preserves width, actions, shared pan state, and resize bounds.' -ForegroundColor Green
+Write-Host 'PASS: EventViewer production renderer reflows prose, preserves evidence, and exposes no false column bar.' -ForegroundColor Green
